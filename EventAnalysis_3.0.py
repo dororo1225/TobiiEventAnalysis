@@ -13,22 +13,40 @@ import time
 ################################################
 
 # # 出力の指定
-OutputPic = 0  # Whether Output Movie (1:Output / 0:Don't Output)
+OutputPic = 1    # Whether Output Movie (1:Output / 0:Don't Output)
 OutputCSV = 1  # Whether OutputCSV (1:Output / 0:Don't Output)
 
+
 # # 入力の指定(Video Input)
-videos = "inokei.mp4"
+video = 'hogehoge_video.mp4'
+
 
 # # 視線データの指定(関数preprocessの引数)
-ParName = 'InoueSatoko'
+ParName = 'HogeHoge' # like 'YamamotoHiroki'
 RecDate = '2015-04-23'
 RecName = 'Recording011'
+
 
 # # イベント名
 EventType = 'EC'
 
+
+# # 画像のresizeの倍率
+prop_resize = 1 * 1.0 / 2
+
+
 # # イベント前後のtime windowの幅(FrameWindow=2: イベントの前後2フレーム)
 FrameWindow = 2
+
+
+# # 画像に加える回転のrotate window
+interval = 10  # 回転角度の間隔
+rotateNum = 3  # 回転の回数
+
+
+# # 視線フィルタの引数
+flagGF = 0
+region = 1.5  # FalseAlarmを減らす、Gazeフィルタのパラメーター
 
 
 # # Choose Face Detector
@@ -48,12 +66,34 @@ def preprocess(x, PName, Date, RName):
     return x
 
 
+# 関数annotateFaceID
+def annotateFaceID(x_an, y_an, wid, hei, image, id):
+    # x_an    [int?]: アノテーション(枠)の左上のX座標
+    # y_an    [int?]: アノテーション(枠)の左上のY座標
+    # wid     [int?]: アノテーション(枠)の幅
+    # hei     [int?]: アノテーション(枠)の高さ
+    # image [imaage]: 画像
+    # id       [int]: FaceID
+    id += 1
+    cv2.rectangle(image, (x_an, y_an), (x_an + wid, y_an + hei), (196, 191, 0), 2)
+    msg = 'F-ID:' + str(id)
+    cv2.putText(image, msg, (x_an, y_an - 10), cv2.FONT_HERSHEY_DUPLEX, 0.75, (196, 191, 0), 1)
+    msg = 'Detected'
+    cv2.putText(image, msg, (0, 45), cv2.FONT_HERSHEY_DUPLEX, 0.75, (196, 191, 0), 1)
+    return [image, id]
+
+
+# 関数noFace
+def noFace(image):
+    msg = 'No Face'
+    cv2.putText(image, msg, (0, 45), cv2.FONT_HERSHEY_DUPLEX, 0.75, (109, 118, 248), 1)
+
 ################################################
 #  メイン処理
 ################################################
 
 # # ビデオの読み込み・プロパティの取得
-cap = cv2.VideoCapture(videos) # Read Video File
+cap = cv2.VideoCapture(video) # Read Video File
 width = int(cap.get(cv2.cv.CV_CAP_PROP_FRAME_WIDTH))
 height = int(cap.get(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT))
 FrameRate = float(cap.get(cv2.cv.CV_CAP_PROP_FPS))
@@ -77,16 +117,15 @@ print df_gaze.head(1)
 print
 
 
-# #  Eye Contactの前後2フレームも含めたDataFrameをつくる(例外処理をつける)
-# recordingタイムスタンプを取得
-# タイムスタンプを設定
+# #  Eye ContactのTimwWindowとRotate Windowも含めたDataFrameをつくる(例外処理をつける)
+# EyeContactの前後FrameWindow(2フレーム)を含めたDataFrameを作成
 EventTimeSTP = df_event[['Recording timestamp', 'Fixation point X', 'Fixation point Y', 'Recording media width', 'Recording media height']]
 EventTimeSTP.index = range(0, EventTimeSTP.shape[0])
-IDs = pd.DataFrame({'EventID': range(0, EventTimeSTP.shape[0]),
-                    'FrameID': np.zeros(EventTimeSTP.shape[0])})
-origin = pd.concat([EventTimeSTP, IDs], axis=1)
-before_upd = pd.concat([EventTimeSTP, IDs], axis=1)
-after_upd = pd.concat([EventTimeSTP, IDs], axis=1)
+ID_frame = pd.DataFrame({'EventID': range(0, EventTimeSTP.shape[0]),
+                         'FrameID': np.zeros(EventTimeSTP.shape[0])})
+origin = pd.concat([EventTimeSTP, ID_frame], axis=1)
+before_upd = pd.concat([EventTimeSTP, ID_frame], axis=1)
+after_upd = pd.concat([EventTimeSTP, ID_frame], axis=1)
 for var in range(1, FrameWindow + 1):
     before_upd[['Recording timestamp']] -= 1 / FrameRate * 1000
     before_upd[['FrameID']] -= 1
@@ -96,9 +135,21 @@ for var in range(1, FrameWindow + 1):
 origin = origin[(origin['Recording timestamp'] >= 0) & (origin['Recording timestamp'] < MaxTimeSTP)] # 例外を除く
 origin = origin.sort("Recording timestamp")
 origin.index = range(0, origin.shape[0])
+# 各フレームに回転を加えた画像を含めたDatFrameを作成
+ID_rotate = pd.DataFrame({'RotateID': np.zeros(origin.shape[0])})
+before_rot = pd.concat([origin, ID_rotate], axis=1)
+after_rot = pd.concat([origin, ID_rotate], axis=1)
+origin = pd.concat([origin, ID_rotate], axis=1)
+for var in range(1, rotateNum + 1):
+    before_rot[['RotateID']] -= interval
+    after_rot[['RotateID']] += interval
+    origin = pd.concat([origin, before_rot, after_rot])
+origin = origin.sort(['Recording timestamp', 'FrameID', 'RotateID'])
+origin.index = range(0, origin.shape[0])
 origin = origin[['Recording timestamp',
                  'EventID',
                  'FrameID',
+                 'RotateID',
                  'Fixation point X',
                  'Fixation point Y',
                  'Recording media width',
@@ -106,79 +157,114 @@ origin = origin[['Recording timestamp',
 
 # # Choose Face Detector
 cascade = cv2.CascadeClassifier(cascade_path)
-
 # 顔検出画像の保存ディレクトリの作成
-if OutputPic == 1 and not os.path.isdir('output'):
+if not os.path.isdir('output'):
     os.mkdir('output')
 
-# Logの準備
-out_list = []
 
+########################
+#  # Face Detection
+########################
+
+out_list = []  # Logの準備
 for idx in origin.index:
     TimeSTP_set = origin.ix[idx, 'Recording timestamp']
     EventID = origin.ix[idx, 'EventID']
     FrameID = int(origin.ix[idx, 'FrameID'])
+    RotateID = int(origin.ix[idx, 'RotateID'])
     Gaze_x = origin.ix[idx, 'Fixation point X']
     Gaze_y = origin.ix[idx, 'Fixation point Y']
+
+    # 画像の切り出し
     cap.set(cv2.cv.CV_CAP_PROP_POS_MSEC, TimeSTP_set)
     ret, im = cap.read()
     FrameNum = int(cap.get(cv2.cv.CV_CAP_PROP_POS_FRAMES))
     MovieTimeStamp = int(cap.get(cv2.cv.CV_CAP_PROP_POS_MSEC))  # MovieTimeStamp > TimeSTP_set!!!
 
     if ret:
+        # # グレースケール化・輝度を正規化
         # im = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)  # gray scale
         # im = cv2.equalizeHist(im)  # 輝度を正規化
-        region = 1.5  # FalseAlarmを減らす、Gazeフィルタのパラメーター
 
-        # 画像を描画・書き出し
-        i = 0  # FaceID
+        # 画像の回転
+        height, width, cha = im.shape
+        M = cv2.getRotationMatrix2D((width / 2, height / 2), RotateID, 1)
+        im = cv2.warpAffine(im, M, (width, height))
+
+        # 視線の回転
+        #
+        #
+        #
+        #
+
+        # 画像のリサイズ
+        im_resize = cv2.resize(im, (int(im.shape[1] * prop_resize), int(im.shape[0] * prop_resize)))
+
+        f_id = 0  # FaceID
+        face_resize = cascade.detectMultiScale(im_resize, 1.1, 2)  # face detection
+
+        # アノテーションを画像に付加して描画
         if OutputPic == 1:
-            im_half = cv2.resize(im, (im.shape[1]/2, im.shape[0]/2))  # resize video
-            face_half = cascade.detectMultiScale(im_half, 1.1, 2)  # face detect
-            cv2.rectangle(im_half, (0, 0), (125, 50), (50, 50, 50), -1)
-            title = 'E-ID:' + str(EventID) + ',' + str(FrameID)
-            cv2.putText(im_half, title, (0, 20), cv2.FONT_HERSHEY_DUPLEX, 0.75, (255, 255, 255), 1)
-            cv2.circle(im_half, (int(Gaze_x/2), int(Gaze_y/2)), 8, (109, 118, 248), 1)
-            if len(face_half) == 0:  # 顔が検出されなかった場合　
-                msg = 'No Face'
-                cv2.putText(im_half, msg, (0, 45), cv2.FONT_HERSHEY_DUPLEX, 0.75, (109, 118, 248), 1)
+            # 画像の左上にEventID, FrameID, RotateIDを記載する
+            cv2.rectangle(im_resize, (0, 0), (180, 50), (50, 50, 50), -1)
+            title = 'E-ID:' + str(EventID) + ',' + str(FrameID) + ',' + str(RotateID)
+
+            # 画像上に視点データを描画する
+            cv2.putText(im_resize, title, (0, 20), cv2.FONT_HERSHEY_DUPLEX, 0.75, (255, 255, 255), 1)
+            cv2.circle(im_resize, (int(Gaze_x * prop_resize), int(Gaze_y * prop_resize)), 8, (109, 118, 248), 1)
+
+            # 枠の描画
+            if len(face_resize) == 0:  # 顔が検出されなかった場合　
+                noFace(im_resize)
+
             else:  # 顔が検出された場合
-                for (x, y, w, h) in face_half:
-                    # 検出された顔内部に視線がある場合
-                    if (Gaze_x / 2 - (x + w / 2)) ** 2 + (Gaze_y / 2 - (y + h / 2)) ** 2 <= (region * h / 2) ** 2:
-                        i += 1
-                        cv2.rectangle(im_half, (x, y), (x + w, y + h), (196, 191, 0), 2)
-                        msg = 'F-ID:' + str(i)
-                        cv2.putText(im_half, msg, (x, y-10), cv2.FONT_HERSHEY_DUPLEX, 0.75, (196, 191, 0), 1)
-                        msg = 'Detected'
-                        cv2.putText(im_half, msg, (0, 45), cv2.FONT_HERSHEY_DUPLEX, 0.75, (196, 191, 0), 1)
-                else:
-                    if i == 0:  # 検出された顔が全てFalseAlarmだった場合
-                        msg = 'No Face'
-                        cv2.putText(im_half, msg, (0, 45), cv2.FONT_HERSHEY_DUPLEX, 0.75, (109, 118, 248), 1)
-            cv2.imshow('Video Stream', im_half)  # Check Detected 'Face'
+                for (x, y, w, h) in face_resize:
+                    if flagGF == 0:  # 視線フィルタなし
+                        im, f_id = annotateFaceID(x, y, w, h, im_resize, f_id)
+                    else:  # 視線フィルタあり
+                        if (Gaze_x * prop_resize - (x + w / 2)) ** 2 + (Gaze_y * prop_resize - (y + h / 2)) ** 2 \
+                                <= (region * h / 2) ** 2:
+                            im, f_id = annotateFaceID(x, y, w, h, im_resize, f_id)
+                # 視線フィルタによってHitがなくなった場合
+                if f_id == 0:
+                    noFace(im_resize)
+
+            # 画像を描画
+            cv2.imshow('Video Stream', im_resize)
+            # キー入力待機
+            # cv2.waitKey(0)
+
             # 画像の書き出し設定
             if FrameID < 0:
-                sign = 'm'
+                sign_f = 'm'
             else:
-                sign = ''
-            file_path = 'output/' + EventType + str(idx) + '_' + 'Event' + str(EventID) + '.' + str(abs(FrameID)) + sign + '.jpg'
-            cv2.imwrite(file_path, im_half)
+                sign_f = ''
+            if RotateID < 0:
+                sign_r = 'm'
+            else:
+                sign_r = ''
+            file_path = 'output/' + EventType + str(idx) + '_' + 'Event' + \
+                        str(EventID) + '.' + str(abs(FrameID)) + sign_f + '.' + str(abs(RotateID)) + sign_r + '.jpg'
+            cv2.imwrite(file_path, im_resize)
 
         # CSVの書き出し
-        i = 0
+        f_id = 0  # FaceID
         if OutputCSV == 1:
-            face = cascade.detectMultiScale(im, 1.1, 3)
-            if len(face) == 0:  # 顔が検出されなかった場合　
-                out_list.append([videos, EventID, FrameID, TimeSTP_set, FrameNum, MovieTimeStamp, None, None, None, None, None])
+            # 枠の描画
+            if len(face_resize) == 0:  # 顔が検出されなかった場合　
+                out_list.append([video, EventID, FrameID, RotateID, TimeSTP_set, FrameNum, MovieTimeStamp, Gaze_x, Gaze_y, None, None, None, None, None])
             else:  # 顔が検出された場合
-                for (x, y, w, h) in face:
-                    if (Gaze_x - (x + w/2))**2 + (Gaze_y - (y + h/2))**2 <= (region*h/2)**2:  # 検出された顔内部に視線がある場合
-                        i += 1
-                        out_list.append([videos, EventID, FrameID, TimeSTP_set, FrameNum, MovieTimeStamp, i, x, y, w, h])
-                else:
-                    if i == 0:  # 検出された顔が全てFalseAlarmだった場合
-                        out_list.append([videos, EventID, FrameID, TimeSTP_set, FrameNum, MovieTimeStamp,  None, None, None, None, None])
+                for (x, y, w, h) in face_resize:
+                    if flagGF == 0:  # 視線フィルタなし
+                        f_id += 1
+                        out_list.append([video, EventID, FrameID, RotateID, TimeSTP_set, FrameNum, MovieTimeStamp, Gaze_x, Gaze_y, f_id, x, y, w, h])
+                    else:  # 視線フィルタあり
+                        if (Gaze_x * prop_resize - (x + w / 2)) ** 2 + (Gaze_y * prop_resize - (y + h / 2)) ** 2 \
+                                <= (region * h / 2) ** 2:
+                            f_id += 1
+                            out_list.append([video, EventID, FrameID, RotateID, TimeSTP_set, FrameNum, MovieTimeStamp, Gaze_x, Gaze_y, f_id, x, y, w, h])
+                if f_id == 0:
+                    out_list.append([video, EventID, FrameID, RotateID, TimeSTP_set, FrameNum, MovieTimeStamp, Gaze_x, Gaze_y, None, None, None, None, None])
 
     if cv2.waitKey(10) > 0:
         cap.release()
@@ -197,9 +283,12 @@ if OutputCSV == 1:
     df_face.columns = ['VideoName',
                        'EventID',
                        'FrameID',
+                       'RotateID',
                        'GazeTimeStamp',
                        'FrameNum',
                        'MovieTimeStamp',
+                       'Gaze_x',
+                       'Gaze_y',
                        'FaceID',
                        'pos_x',
                        'pos_y',
