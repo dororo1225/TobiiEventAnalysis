@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 import pandas as pd
 import os
+import math
 import time
 
 ################################################
@@ -18,7 +19,7 @@ OutputCSV = 1  # Whether OutputCSV (1:Output / 0:Don't Output)
 
 
 # # 入力の指定(Video Input)
-video = 'hogehoge_video.mp4'
+video = "hogehoge.mp4"
 
 
 # # 視線データの指定(関数preprocessの引数)
@@ -36,16 +37,16 @@ prop_resize = 1 * 1.0 / 2
 
 
 # # イベント前後のtime windowの幅(FrameWindow=2: イベントの前後2フレーム)
-FrameWindow = 2
+FrameWindow = 0
 
 
 # # 画像に加える回転のrotate window
 interval = 10  # 回転角度の間隔
-rotateNum = 3  # 回転の回数
+rotateNum = 5  # 回転の回数
 
 
 # # 視線フィルタの引数
-flagGF = 0
+flagGF = 1
 region = 1.5  # FalseAlarmを減らす、Gazeフィルタのパラメーター
 
 
@@ -64,6 +65,24 @@ cascade_path = "C:\opencv\sources\data\haarcascades\haarcascade_frontalface_alt.
 def preprocess(x, PName, Date, RName):
     x = x[(x['Participant name'] == PName) & (x['Recording date'] == Date) & (x['Recording name'].str.startswith(RName))]
     return x
+
+
+# 関数rotateGaze
+def rotateGaze(gaze_x, gaze_y, c_x, c_y, theta):
+    # gaze_x  [int]: 固視点のX座標
+    # gaze_y  [int]: 固視点のY座標
+    # c_x     [int]: 回転中心のX座標
+    # c_y     [int]: 回転中心のY座標
+    # theta   [int]: 回転角度(degree)
+    theta = - theta
+    Cos = math.cos(math.radians(theta))
+    Sin = math.sin(math.radians(theta))
+    M = np.array([[Cos, - Sin, c_x - c_x * Cos + c_y * Sin],
+                  [Sin, Cos, c_y - c_x * Sin - c_y * Cos],
+                  [0, 0, 1]])
+    gaze_vec = np.array([gaze_x, gaze_y, 1])
+    gaze_rot = M .dot(gaze_vec)  # 行列の積算
+    return [gaze_rot[0], gaze_rot[1]]
 
 
 # 関数annotateFaceID
@@ -88,6 +107,8 @@ def noFace(image):
     msg = 'No Face'
     cv2.putText(image, msg, (0, 45), cv2.FONT_HERSHEY_DUPLEX, 0.75, (109, 118, 248), 1)
 
+
+
 ################################################
 #  メイン処理
 ################################################
@@ -108,7 +129,7 @@ print
 
 # # 視線データの読み込み
 RecName = RecName if 'RecName' in locals() else 'Recording'
-reader = pd.read_csv('DataExport.tsv', delimiter='\t', chunksize=1000)
+reader = pd.read_csv('Data Export.tsv', delimiter='\t', chunksize=1000)
 df_gaze = pd.concat((preprocess(r, ParName, RecDate, RecName) for r in reader), ignore_index=True)
 df_event = df_gaze[df_gaze['Event'] == EventType]  # select Event
 print 'df_gaze'
@@ -192,10 +213,7 @@ for idx in origin.index:
         im = cv2.warpAffine(im, M, (width, height))
 
         # 視線の回転
-        #
-        #
-        #
-        #
+        Gaze_x, Gaze_y = rotateGaze(Gaze_x, Gaze_y, width / 2, height / 2, RotateID)
 
         # 画像のリサイズ
         im_resize = cv2.resize(im, (int(im.shape[1] * prop_resize), int(im.shape[0] * prop_resize)))
@@ -234,7 +252,7 @@ for idx in origin.index:
             # キー入力待機
             # cv2.waitKey(0)
 
-            # 画像の書き出し設定
+            # 画像の書き出し
             if FrameID < 0:
                 sign_f = 'm'
             else:

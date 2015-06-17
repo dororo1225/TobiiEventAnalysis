@@ -1,0 +1,54 @@
+---
+title: "Analysys"
+author: "Hiroki YAMAMOTO"
+date: "2015年6月17日"
+output: html_document
+---
+
+```{r}
+library(plyr)
+library(dplyr)
+library(pipeR)
+library(ggplot2)
+options(dplyr.print_max = 1e9) # dplyrの表示オプション
+```
+
+```{r}
+data <- read.csv("FacePosition.csv")
+```
+
+```{r}
+summary(data)
+```
+
+```{r}
+data$FaceID <- as.factor(data$FaceID)
+data$FrameID <- as.factor(data$FrameID)
+data$RotateID <- as.factor(data$RotateID)
+```
+
+```{r}
+group_by(data, EventID) %>>%
+  summarise(rows = n(),
+            fra_lev = length(levels(FrameID)),
+            rot_lev = length(levels(RotateID)),
+            pic_num = fra_lev * rot_lev,
+            Miss = sum(is.na(FaceID)),
+            Hit = pic_num - Miss,
+            allMiss = ifelse(Miss == pic_num, 1, 0),
+            withFA = ifelse(rows != pic_num, 1, 0)
+            )
+```
+
+```{r}
+group_by(data, EventID, FrameID) %>>%
+  summarise(rows = n(),
+            pic_num = length(levels(RotateID)),
+            Miss = sum(is.na(FaceID)),
+            Hit = pic_num - Miss,
+            allMiss = ifelse(Miss == pic_num, 1, 0),
+            withFA = ifelse(rows != pic_num, 1, 0)
+            )
+```
+
+
