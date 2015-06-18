@@ -19,11 +19,11 @@ OutputCSV = 1  # Whether OutputCSV (1:Output / 0:Don't Output)
 
 
 # # 入力の指定(Video Input)
-video = "inokei.mp4"
+video = "hogehoge.mp4"
 
 
 # # 視線データの指定(関数preprocessの引数)
-ParName = 'InoueSatoko'
+ParName = 'HogeHoge'  # like 'YamamotoHiroki'
 RecDate = '2015-04-23'
 RecName = 'Recording011'
 
