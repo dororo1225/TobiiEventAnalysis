@@ -19,11 +19,11 @@ OutputCSV = 1  # Whether OutputCSV (1:Output / 0:Don't Output)
 
 
 # # 入力の指定(Video Input)
-video = "hogehoge.mp4"
+video = "inokei.mp4"
 
 
 # # 視線データの指定(関数preprocessの引数)
-ParName = 'HogeHoge' # like 'YamamotoHiroki'
+ParName = 'InoueSatoko'
 RecDate = '2015-04-23'
 RecName = 'Recording011'
 
@@ -46,7 +46,7 @@ rotateNum = 5  # 回転の回数
 
 
 # # 視線フィルタの引数
-flagGF = 1
+flagGF = 1 # 視線フィルタの有無
 region = 1.5  # FalseAlarmを減らす、Gazeフィルタのパラメーター
 
 
@@ -198,9 +198,11 @@ for idx in origin.index:
 
     # 画像の切り出し
     cap.set(cv2.cv.CV_CAP_PROP_POS_MSEC, TimeSTP_set)
-    ret, im = cap.read()
     FrameNum = int(cap.get(cv2.cv.CV_CAP_PROP_POS_FRAMES))
-    MovieTimeStamp = int(cap.get(cv2.cv.CV_CAP_PROP_POS_MSEC))  # MovieTimeStamp > TimeSTP_set!!!
+    # cap.set(cv2.cv.CV_CAP_PROP_POS_FRAMES, Frame_Num - 1)
+    # FrameNum = int(cap.get(cv2.cv.CV_CAP_PROP_POS_FRAMES))
+    MovieTimeStamp = int(cap.get(cv2.cv.CV_CAP_PROP_POS_MSEC))
+    ret, im = cap.read()
 
     if ret:
         # # グレースケール化・輝度を正規化
