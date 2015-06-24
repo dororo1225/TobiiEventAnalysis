@@ -19,13 +19,14 @@ OutputCSV = 1  # Whether OutputCSV (1:Output / 0:Don't Output)
 
 
 # # 入力の指定(Video Input)
-video = "hogehoge.mp4"
-
+video = 'TB_hogehoge_hoge.mp4'
+video_name = video.split('.mp4')[0]
+video_name = video_name.split('TB_')[1]
 
 # # 視線データの指定(関数preprocessの引数)
-ParName = 'HogeHoge'  # like 'YamamotoHiroki'
-RecDate = '2015-04-23'
-RecName = 'Recording011'
+ParName = 'hogehoge'
+RecDate = '2015-06-08'
+RecName = 'Recording008'
 
 
 # # イベント名
@@ -41,13 +42,13 @@ FrameWindow = 0
 
 
 # # 画像に加える回転のrotate window
-interval = 10  # 回転角度の間隔
-rotateNum = 5  # 回転の回数
+interval = 5  # 回転角度の間隔
+rotateNum = 9  # 回転の回数
 
 
 # # 視線フィルタの引数
-flagGF = 1 # 視線フィルタの有無
-region = 1.5  # FalseAlarmを減らす、Gazeフィルタのパラメーター
+flagGF = 1  # 視線フィルタの有無
+# region = 1  # FalseAlarmを減らす、Gazeフィルタのパラメーター
 
 
 # # Choose Face Detector
@@ -60,7 +61,6 @@ cascade_path = "C:\opencv\sources\data\haarcascades\haarcascade_frontalface_alt.
 ################################################
 #  処理関数
 ################################################
-
 # # 関数preprocess
 def preprocess(x, PName, Date, RName):
     x = x[(x['Participant name'] == PName) & (x['Recording date'] == Date) & (x['Recording name'].str.startswith(RName))]
@@ -113,6 +113,8 @@ def noFace(image):
 #  メイン処理
 ################################################
 
+time_start = time.time()
+
 # # ビデオの読み込み・プロパティの取得
 cap = cv2.VideoCapture(video) # Read Video File
 width = int(cap.get(cv2.cv.CV_CAP_PROP_FRAME_WIDTH))
@@ -126,17 +128,20 @@ print 'MaxFrameNumber', FrameNum_Total
 print 'MaxTimeStamp', MaxTimeSTP
 print
 
-
 # # 視線データの読み込み
 RecName = RecName if 'RecName' in locals() else 'Recording'
-reader = pd.read_csv('Data Export.tsv', delimiter='\t', chunksize=1000)
-df_gaze = pd.concat((preprocess(r, ParName, RecDate, RecName) for r in reader), ignore_index=True)
-df_event = df_gaze[df_gaze['Event'] == EventType]  # select Event
-print 'df_gaze'
-print df_gaze.shape
-print df_gaze.head(1)
-print
-
+if not os.path.isfile('Event_' + video_name + '.csv'):
+    reader = pd.read_csv('Data Export.tsv', delimiter='\t', chunksize=1000)
+    df_gaze = pd.concat((preprocess(r, ParName, RecDate, RecName) for r in reader), ignore_index=True)
+    df_event = df_gaze[df_gaze['Event'] == EventType]  # select Event
+    df_gaze.to_csv('Gaze_' + video_name + '.csv', index = False)
+    df_event.to_csv('Event_' + video_name + '.csv', index = False)
+    print 'df_gaze'
+    print df_gaze.shape
+    print df_gaze.head(1)
+    print
+else:
+    df_event = pd.read_csv('Event_' + video_name + '.csv')
 
 # #  Eye ContactのTimwWindowとRotate Windowも含めたDataFrameをつくる(例外処理をつける)
 # EyeContactの前後FrameWindow(2フレーム)を含めたDataFrameを作成
@@ -175,13 +180,20 @@ origin = origin[['Recording timestamp',
                  'Fixation point Y',
                  'Recording media width',
                  'Recording media height']]
+origin.to_csv('origin_' + video_name + '.csv', index=False)
+print len(origin.index)
 
 # # Choose Face Detector
 cascade = cv2.CascadeClassifier(cascade_path)
 # 顔検出画像の保存ディレクトリの作成
 if not os.path.isdir('output'):
     os.mkdir('output')
-
+else:
+    OutputPic = 0
+    print '-----------------------------'
+    print 'Folder output already exists'
+    print '-----------------------------'
+    print
 
 ########################
 #  # Face Detection
@@ -242,9 +254,11 @@ for idx in origin.index:
                     if flagGF == 0:  # 視線フィルタなし
                         im, f_id = annotateFaceID(x, y, w, h, im_resize, f_id)
                     else:  # 視線フィルタあり
+                        region = math.sqrt(w ** 2 + h ** 2) / 2
                         if (Gaze_x * prop_resize - (x + w / 2)) ** 2 + (Gaze_y * prop_resize - (y + h / 2)) ** 2 \
-                                <= (region * h / 2) ** 2:
+                                <= region ** 2:
                             im, f_id = annotateFaceID(x, y, w, h, im_resize, f_id)
+                            print region
                 # 視線フィルタによってHitがなくなった場合
                 if f_id == 0:
                     noFace(im_resize)
@@ -279,8 +293,9 @@ for idx in origin.index:
                         f_id += 1
                         out_list.append([video, EventID, FrameID, RotateID, TimeSTP_set, FrameNum, MovieTimeStamp, Gaze_x, Gaze_y, f_id, x, y, w, h])
                     else:  # 視線フィルタあり
+                        region = math.sqrt(w ** 2 + h ** 2) / 2
                         if (Gaze_x * prop_resize - (x + w / 2)) ** 2 + (Gaze_y * prop_resize - (y + h / 2)) ** 2 \
-                                <= (region * h / 2) ** 2:
+                                <= region ** 2:
                             f_id += 1
                             out_list.append([video, EventID, FrameID, RotateID, TimeSTP_set, FrameNum, MovieTimeStamp, Gaze_x, Gaze_y, f_id, x, y, w, h])
                 if f_id == 0:
@@ -314,4 +329,8 @@ if OutputCSV == 1:
                        'pos_y',
                        'Width',
                        'Height']
-    df_face.to_csv('FacePosition.csv', index=False, na_rep='NA')
+    df_face.to_csv('Face_' + video_name + '.csv', index=False, na_rep='NA')
+
+
+time_elapsed = time.time() - time_start
+print "elapsed_time:{0}".format(time_elapsed) + "[sec]"
