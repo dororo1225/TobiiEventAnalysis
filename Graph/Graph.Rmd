@@ -1,7 +1,7 @@
 ---
-title: "Analysys"
+title: "Graph"
 author: "Hiroki YAMAMOTO"
-date: "2015年6月17日"
+date: "2015.06.17"
 output: html_document
 ---
 ```{r, message=FALSE}
@@ -10,6 +10,7 @@ library(dplyr)
 library(ggplot2)
 library(stringr)
 library(pipeR)
+library(grid)
 options(dplyr.print_max = 1e9) # dplyrの表示オプション
 
 gg_color_hue <- function(n, l=65) {
@@ -18,8 +19,7 @@ gg_color_hue <- function(n, l=65) {
 }
 ```
 
-
-###Sessionを定義するtime intervalの閾値を決める
+###データの読み込み
 
 ```{r, fig.height=6, fig.width=6}
 # データを取得
@@ -56,6 +56,46 @@ for(i in 1:length(files))
 }
 ```
 
+```{r}
+# グラフパラメーター
+PT = 1
+ATT = 1
+ATX = 1
+LTT = 1
+LTX = 1
+FTX = 1
+```
+
+```{r}
+# グラフパラメーター
+PT = 2
+ATT = 1.75
+ATX = 1.5
+LTT = 1.75
+LTX = 1.5
+FTX = 1.5
+```
+
+###Eye Contact Sessionn
+```{r}
+df %>>%
+  mutate(Name = revalue(Name, c("INOKEI"="Walker\nINOKEI", "KOTAYU"="Crawler\nKOTAYU"))) %>>%
+  group_by(Name, AgeinMonth) %>>%
+  summarise(N = n()) %>>%
+  ggplot(aes(x = Name, y = N, fill = Name, color = Name)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Number of Eye Contact Session\n", x = "Name", y = "count") +
+  theme(axis.text.x = element_text(colour = "grey25", face = "bold")) +
+  theme(plot.title = element_text(size = rel(PT), lineheight = 0.5, face = "bold"),
+        axis.title = element_text(size = rel(ATT), face = "bold"),
+        axis.text = element_text(size = rel(ATX))
+        ) +
+  theme(legend.title = element_text(size = rel(LTT), face = "bold"),
+        legend.text = element_text(size = rel(LTX)),
+        legend.key.height = unit(LTX, "cm")
+        )
+```
+
 
 ###Eye Contact Sessionにおけるmean annotation sizeのヒストグラム
 
@@ -74,20 +114,50 @@ df %>>%
   geom_line(stat="density", adjust=0.75, lwd=1.5, aes(colour=Name)) +
   facet_grid(Name~.) +
   xlim(0, Max_height) +
-  labs(title="Average Size of Annotation in Eye Contact Session", x="Annotation Height (pixel)")
+  labs(title="Average Size of Annotation\n\nin Eye Contact Session\n", x="Annotation Height (pixel)") +
+  scale_fill_discrete(name="Name",
+                      breaks=c("INOKEI", "KOTAYU"),
+                      labels=c("Walker\nINOKEI", "Crawler\nKOTAYU")) +
+  scale_colour_discrete(name="Name",
+                      breaks=c("INOKEI", "KOTAYU"),
+                      labels=c("Walker\nINOKEI", "Crawler\nKOTAYU")) +
+  theme(plot.title = element_text(size = rel(PT), lineheight = 0.5, face = "bold"),
+        axis.title = element_text(size = rel(ATT), face = "bold"),
+        axis.text.x = element_text(size = rel(ATX))
+        ) +
+  theme(legend.title = element_text(size = rel(LTT), face = "bold"),
+        legend.text = element_text(size = rel(LTX)),
+        legend.key.height = unit(LTX, "cm")
+        ) +
+  theme(strip.text.y = element_text(size = rel(FTX), face = "bold"))
 ```
 
 ###Eye Contact Sessionのdurationのヒストグラム
+
 ```{r, fig.height=6, fig.width=6}
 df %>>%
   select(Name, Observe, AgeinDays, AgeinMonth, Duration) %>>%
   na.omit() %>>%
   ggplot(aes(x=Duration, y=..density..)) +
-  geom_histogram(binwidth=250, alpha=0.25, aes(fill=Name, colour=Name)) +
+  geom_histogram(binwidth=200, alpha=0.25, aes(fill=Name, colour=Name)) +
   geom_density(colour = NA) +
-  geom_line(stat="density", adjust=0.75, lwd=1.5, aes(colour=Name)) +
+  geom_line(stat="density", adjust=0.5, lwd=1.5, aes(colour=Name)) +
   facet_grid(Name~.) +
   xlim(0, 4000) +
-  labs(title="Duration of Eye Contact Session", x="Duration (msec)")
-
+  labs(title="Duration of Eye Contact Session\n", x="Duration (msec)") +
+  scale_fill_discrete(name="Name",
+                      breaks=c("INOKEI", "KOTAYU"),
+                      labels=c("Walker\nINOKEI", "Crawler\nKOTAYU")) +
+  scale_colour_discrete(name="Name",
+                      breaks=c("INOKEI", "KOTAYU"),
+                      labels=c("Walker\nINOKEI", "Crawler\nKOTAYU")) +
+    theme(plot.title = element_text(size = rel(PT), lineheight = 0.5, face = "bold"),
+        axis.title = element_text(size = rel(ATT), face = "bold"),
+        axis.text.x = element_text(size = rel(ATX))
+        ) +
+  theme(legend.title = element_text(size = rel(LTT), face = "bold"),
+        legend.text = element_text(size = rel(LTX)),
+        legend.key.height = unit(LTX, "cm")
+        ) +
+  theme(strip.text.y = element_text(size = rel(FTX), face = "bold"))
 ```

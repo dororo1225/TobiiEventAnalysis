@@ -5,7 +5,9 @@ import os
 import sqlite3
 import pandas as pd
 
-
+################################################
+#  処理関数
+################################################
 def db_output(file_name):
     obs_id = file_name.split('.db')[0]
 
@@ -38,10 +40,10 @@ def db_output(file_name):
         df = pd.DataFrame(Dpos)
         df.columns = ["id", "imgpath", "x", "y", "width", "height", "status", "name", "datetime"]
         print df
-        if not os.path.isfile("TeacherData.csv"):
-            df.to_csv('TeacherData.csv', mode='a', index=False)
+        if not os.path.isfile('AnnotationData.csv'):
+            df.to_csv('AnnotationData.csv', mode='a', index=False)
         else:
-            df.to_csv('TeacherData.csv', mode='a', index=False,  header=False)
+            df.to_csv('AnnotationData.csv', mode='a', index=False,  header=False)
 
     # progressテーブルのレコードを取得
     cursor.execute("select * from progress")
@@ -62,12 +64,15 @@ def db_output(file_name):
         df_progress.to_csv('progress.csv', mode='a', index=False,  header=False)
 
 
-data_dir = os.getenv("HOMEDRIVE") + \
-                    os.getenv("HOMEPATH") +  \
-                    "\\Dropbox\\AnnotationAssistant"
-db_names = os.listdir(data_dir)
+################################################
+#  メイン処理
+################################################
 
-for db in db_names:
-    db_path = data_dir + "\\" + db
-    print db_path
-    db_output(db_path)
+obs_id = os.getcwd().split('\\')[-3]
+
+db_name = obs_id  + '.db'
+data_path = os.getenv("HOMEDRIVE") + \
+                    os.getenv("HOMEPATH") +  \
+                    "\\Dropbox\\AnnotationAssistant\\" + db_name
+
+db_output(data_path)
