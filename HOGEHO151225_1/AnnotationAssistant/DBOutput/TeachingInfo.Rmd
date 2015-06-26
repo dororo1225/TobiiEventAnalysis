@@ -1,0 +1,42 @@
+---
+title: "Teachers' Progress"
+author: "Hiroki YAMAMOTO"
+date: "2015.5.30"
+output: html_document
+---
+```{r}
+library(plyr)
+library(dplyr)
+library(ggplot2)
+library(pipeR)
+```
+
+# get progress data
+```{r}
+progress <- read.csv("progress.csv")
+progress
+```
+
+# get teacher data
+```{r}
+teacher <- read.csv("TeacherData.csv")
+teacher$datetime <- as.Date(teacher$datetime, format="%Y-%m-%d")
+summary(teacher)
+```
+
+# grouped by name
+```{r}
+teacher %>>%
+  group_by(name) %>>%
+  summarise(posNum = n(),
+            prop = 100 * posNum / progress$positive)
+```
+
+# grouped by date & name
+```{r}
+teacher %>>%
+  group_by(name, datetime) %>>%
+  summarise(posNum = n(),
+            prop = 100 * posNum / progress$positive)
+```
+

@@ -19,12 +19,12 @@ OutputCSV = 1  # Whether OutputCSV (1:Output / 0:Don't Output)
 
 
 # # 入力の指定(Video Input)
-video = 'TB_hogehoge_hoge.mp4'
+video = 'TB_HOGEHO150608_1.mp4'
 video_name = video.split('.mp4')[0]
 video_name = video_name.split('TB_')[1]
 
 # # 視線データの指定(関数preprocessの引数)
-ParName = 'hogehoge'
+ParName = 'HogeHoge' # like 'YamamotoHiroki'
 RecDate = '2015-06-08'
 RecName = 'Recording008'
 
@@ -180,7 +180,7 @@ origin = origin[['Recording timestamp',
                  'Fixation point Y',
                  'Recording media width',
                  'Recording media height']]
-origin.to_csv('origin_' + video_name + '.csv', index=False)
+origin.to_csv('Origin_' + video_name + '.csv', index=False)
 print len(origin.index)
 
 # # Choose Face Detector
@@ -284,22 +284,25 @@ for idx in origin.index:
         # CSVの書き出し
         f_id = 0  # FaceID
         if OutputCSV == 1:
+            if OutputPic == 0:
+                file_path = None
+
             # 枠の描画
             if len(face_resize) == 0:  # 顔が検出されなかった場合　
-                out_list.append([video, EventID, FrameID, RotateID, TimeSTP_set, FrameNum, MovieTimeStamp, Gaze_x, Gaze_y, None, None, None, None, None])
+                out_list.append([video, EventID, FrameID, RotateID, TimeSTP_set, FrameNum, MovieTimeStamp, Gaze_x, Gaze_y, None, None, None, None, None, file_path])
             else:  # 顔が検出された場合
                 for (x, y, w, h) in face_resize:
                     if flagGF == 0:  # 視線フィルタなし
                         f_id += 1
-                        out_list.append([video, EventID, FrameID, RotateID, TimeSTP_set, FrameNum, MovieTimeStamp, Gaze_x, Gaze_y, f_id, x, y, w, h])
+                        out_list.append([video, EventID, FrameID, RotateID, TimeSTP_set, FrameNum, MovieTimeStamp, Gaze_x, Gaze_y, f_id, x, y, w, h, file_path])
                     else:  # 視線フィルタあり
                         region = math.sqrt(w ** 2 + h ** 2) / 2
                         if (Gaze_x * prop_resize - (x + w / 2)) ** 2 + (Gaze_y * prop_resize - (y + h / 2)) ** 2 \
                                 <= region ** 2:
                             f_id += 1
-                            out_list.append([video, EventID, FrameID, RotateID, TimeSTP_set, FrameNum, MovieTimeStamp, Gaze_x, Gaze_y, f_id, x, y, w, h])
+                            out_list.append([video, EventID, FrameID, RotateID, TimeSTP_set, FrameNum, MovieTimeStamp, Gaze_x, Gaze_y, f_id, x, y, w, h, file_path])
                 if f_id == 0:
-                    out_list.append([video, EventID, FrameID, RotateID, TimeSTP_set, FrameNum, MovieTimeStamp, Gaze_x, Gaze_y, None, None, None, None, None])
+                    out_list.append([video, EventID, FrameID, RotateID, TimeSTP_set, FrameNum, MovieTimeStamp, Gaze_x, Gaze_y, None, None, None, None, None, file_path])
 
     if cv2.waitKey(10) > 0:
         cap.release()
@@ -328,7 +331,8 @@ if OutputCSV == 1:
                        'pos_x',
                        'pos_y',
                        'Width',
-                       'Height']
+                       'Height',
+                       'Picture']
     df_face.to_csv('Face_' + video_name + '.csv', index=False, na_rep='NA')
 
 

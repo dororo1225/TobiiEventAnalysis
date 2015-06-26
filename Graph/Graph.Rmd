@@ -1,0 +1,93 @@
+---
+title: "Analysys"
+author: "Hiroki YAMAMOTO"
+date: "2015年6月17日"
+output: html_document
+---
+```{r, message=FALSE}
+library(plyr)
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(pipeR)
+options(dplyr.print_max = 1e9) # dplyrの表示オプション
+
+gg_color_hue <- function(n, l=65) {
+  hues <- seq(15, 375, length=n+1)
+  hcl(h=hues, l=l, c=100)[1:n]
+}
+```
+
+
+###Sessionを定義するtime intervalの閾値を決める
+
+```{r, fig.height=6, fig.width=6}
+# データを取得
+files <-list.files(getwd(), pattern='Session_')
+
+df <- data.frame(Name = factor(),
+                 Observe = factor(),
+                 AgeinDays = integer(),
+                 AgeinMonth = integer(),
+                 video = factor(),
+                 SessionID = integer(),
+                 Eve_lev = integer(),
+                 Fra_lev = integer(),
+                 Rot_lev = integer(),
+                 pic_num = integer(),
+                 ano_num = integer(),
+                 Miss = integer(),
+                 Removed = integer(),
+                 Detect = integer(),
+                 allMiss = integer(),
+                 multiFace = integer(),
+                 Mean = numeric(),
+                 Mean_rmv = numeric(),
+                 SD = numeric(),
+                 SD_rmv = numeric(),
+                 Duration = integer()
+                 )
+
+for(i in 1:length(files))
+{
+  data <- read.csv(files[i])
+  
+  df <- rbind(df, data)
+}
+```
+
+
+###Eye Contact Sessionにおけるmean annotation sizeのヒストグラム
+
+```{r, fig.height=6, fig.width=6}
+# フレームサイズ
+file_name <- list.files(getwd(), pattern='Origin_')
+D <- read.csv(file_name)
+Max_height <- D[1, ncol(D)] / 2 
+
+df %>>%
+  select(Name, Observe, AgeinDays, AgeinMonth, Mean_rmv) %>>%
+  na.omit() %>>%
+  ggplot(aes(x=Mean_rmv, y=..density..)) +
+  geom_histogram(binwidth=18, alpha=0.25, aes(fill=Name, colour=Name)) +
+  geom_density(colour = NA) +
+  geom_line(stat="density", adjust=0.75, lwd=1.5, aes(colour=Name)) +
+  facet_grid(Name~.) +
+  xlim(0, Max_height) +
+  labs(title="Average Size of Annotation in Eye Contact Session", x="Annotation Height (pixel)")
+```
+
+###Eye Contact Sessionのdurationのヒストグラム
+```{r, fig.height=6, fig.width=6}
+df %>>%
+  select(Name, Observe, AgeinDays, AgeinMonth, Duration) %>>%
+  na.omit() %>>%
+  ggplot(aes(x=Duration, y=..density..)) +
+  geom_histogram(binwidth=250, alpha=0.25, aes(fill=Name, colour=Name)) +
+  geom_density(colour = NA) +
+  geom_line(stat="density", adjust=0.75, lwd=1.5, aes(colour=Name)) +
+  facet_grid(Name~.) +
+  xlim(0, 4000) +
+  labs(title="Duration of Eye Contact Session", x="Duration (msec)")
+
+```
