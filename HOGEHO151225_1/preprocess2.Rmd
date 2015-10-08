@@ -8,17 +8,17 @@ output: html_document
 library(plyr)
 library(dplyr)
 library(stringr)
+library(readr)
 library(pipeR)
-options(dplyr.print_max = 1e9) # dplyrの表示オプション
+options(dplyr.print_max = 1e9, dplyr.width = Inf) # dplyrの表示オプション
 ```
 
 ```{r}
 # unpreprocDataを取得
 file_nameUP <-list.files(getwd(), pattern='unprocData_')
 
-if(length(file_nameUP) != 0)
-  {
-  dataUP <- read.csv(file_nameUP)
+if(length(file_nameUP) != 0){
+  dataUP <- read_csv(file_nameUP)
 }
 
 dataUP$SessionID <- as.factor(dataUP$SessionID)
@@ -36,10 +36,9 @@ setwd("AnnotationAssistant/DBOutput")
 
 file_nameAN <-list.files(getwd(), pattern='Annotation')
 
-if(length(file_nameAN) != 0)
-  {
+if(length(file_nameAN) != 0){
   dataAN <- read.csv(file_nameAN)
-  }
+}
 
 setwd(HD)
 ```
@@ -90,7 +89,7 @@ for(i in 1:nrow(dataAN))
   dataUP$pos_x[dataUP$EventID == eID & dataUP$FrameID == fID & dataUP$RotateID == rID] <- dataAN$x[i]
   dataUP$pos_y[dataUP$EventID == eID & dataUP$FrameID == fID & dataUP$RotateID == rID] <- dataAN$y[i]
   dataUP$Width[dataUP$EventID == eID & dataUP$FrameID == fID & dataUP$RotateID == rID] <- dataAN$width[i]
-  dataUP$Height_rmv[dataUP$EventID == eID & dataUP$FrameID == fID & dataUP$RotateID == rID] <- dataAN$height[i]
+  dataUP$Height[dataUP$EventID == eID & dataUP$FrameID == fID & dataUP$RotateID == rID] <- dataAN$height[i]
   }
 ```
 
@@ -117,32 +116,28 @@ birth <- as.POSIXct(birthday$Birth[birthday$NameID == name_id])
 AiD <- length(seq(as.Date(birth), as.Date(obs), "day")) - 1 # AgeinDays
 AiM <- length(seq(as.Date(birth), as.Date(obs), "month")) - 1 # AgeinMonth
 
-
 dataUP %>>%
   group_by(SessionID) %>>%
-  summarise(Eve_lev = length(levels(droplevels(EventID))),
-            Fra_lev = length(levels(FrameID)), # SessionあたりのFrameIDの数
-            Rot_lev = length(levels(RotateID)), # SessiontあたりのRotateIDの数
+  summarise(Eve_lev = length(levels(droplevels(EventID))), # SessionあたりのEventIDの水準の数
+            Fra_lev = length(levels(FrameID)), # SessionあたりのFrameIDの水準の数
+            Rot_lev = length(levels(RotateID)), # SessiontあたりのRotateIDの水準数
             pic_num = Eve_lev * Fra_lev * Rot_lev, # SessionあたりのFace Detectionを実施した画像数
-            ano_num = n(), # Sessionあたりのannotationの数
-            Miss = sum(is.na(FaceID)), # Eventあたりの, 顔を検出できなかった画像の数
-            Removed = sum(FaceID == 0, na.rm=TRUE), # 無効化されたannotationの数
-            Detect = ano_num - Miss - Removed, # Eventあたりの, (FAも含まれるかもしれないが)顔を検出できた画像の数
-            allMiss = ifelse(Miss + Removed == ano_num, 1, 0), # ひとつも顔が検出されないEventであるかどうか
-            multiFace = ifelse(max(FaceID, na.rm=TRUE) >= 2, 1, 0), # Event内の画像に, 複数の顔が検出されることがあるかどうか
-            Mean = mean(Height, na.rm=TRUE),
-            Mean_rmv = mean(Height_rmv, na.rm=TRUE),
-            SD = sd(Height, na.rm=TRUE),
-            SD_rmv = sd(Height_rmv, na.rm=TRUE),
-            Duration = max(GazeTimeStamp, na.rm=TRUE) - min(GazeTimeStamp, na.rm=TRUE)
+            row_num = n(),
+            multiFace = ifelse(max(FaceID, na.rm=TRUE) >= 2, 1, 0), # 同一画像に,複数のannotaionが検出されることがあるか
+            Detect = sum(FaceID == 1, na.rm=TRUE), # 検出されたannotationの数
+            allMiss = ifelse(Detect == 0, 1, 0),
+            Mean = mean(Height, na.rm=TRUE), # Sessionあたりのannotationサイズの平均
+            SD = sd(Height, na.rm=TRUE), # Sessionあたりのannotationサイズの標準偏差
+            Duration = max(GazeTimeStamp, na.rm=TRUE) - min(GazeTimeStamp, na.rm=TRUE), # Sessionの時間長
+            Deg = mean(Degree, na.rm=TRUE)
             ) %>>%
   mutate(Name = factor(name_id),
-               Observe = obs,
-               AgeinDays = AiD,
-               AgeinMonth = AiM,
-               Video = factor(file_id)
-               ) -> df_Session
-df_Session <- df_Session[c(17:21, 1:16)] 
+         Observe = obs,
+         AgeinDays = AiD,
+         AgeinMonth = AiM,
+         Video = factor(file_id)
+         ) -> df_Session
+df_Session <- df_Session[c(14:18, 1:13)] 
 complete <- 1
 
 ```

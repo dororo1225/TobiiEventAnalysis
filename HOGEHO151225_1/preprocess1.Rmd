@@ -5,54 +5,78 @@ date: "2015.06.17"
 output: html_document
 ---
 ```{r, message=FALSE}
+library(readr)
 library(plyr)
 library(dplyr)
+library(tidyr)
+library(readr)
 library(ggplot2)
 library(stringr)
 library(pipeR)
-options(dplyr.print_max = 1e9) # dplyrの表示オプション
-
+options(dplyr.print_max = 1e9, dplyr.width = Inf) # dplyrの表示オプション
 ```
 
 ###Sessionを定義するtime intervalの閾値を決める
-
 ```{r, fig.height=6, fig.width=6}
 # データを取得
-file_name <-list.files(getwd(), pattern='Event_')
-data <- read.csv(file_name)
+files <-list.files(getwd(), pattern='Event_')
+
+read_csv(files[1], n_max = 1) %>>%
+  head(0) -> df
+
+for(i in 1:length(files))
+{
+  data <- read_csv(files[i])
+  df <- bind_rows(df, data)
+}
+
+df <- df[-length(df)] # 最終列を削除
+colnames(df) = str_replace_all(colnames(df), pattern = " ", replacement = "_")
+
+df$Participant_name <- as.factor(df$Participant_name)
+df$Recording_name <- as.factor(df$Recording_name)
+df$Recording_date <- as.factor(df$Recording_date)
 
 # EyeContact Event間の時間差を計算
-int <- diff(data$Recording.timestamp)
-length(int)
+df %>>% 
+  mutate(interval = c(NA, diff(df$Recording_timestamp))) -> df
+df$interval[df$interval < 0] <- NA
 
 # time intervalのヒストグラム
 fRate <- 50
 b_wid <- 1000 / fRate
 
-int %>>%
-  as.data.frame() %>>%
-  ggplot(aes(x = int)) +
+df %>>%
+  ggplot(aes(x = interval, fill=Participant_name)) +
   geom_histogram(binwidth = b_wid) +
-  xlim(0, 4000) + 
+  facet_grid(Participant_name~.) +
+  coord_cartesian(ylim = c(0, 500), xlim = c(0, 1000)) +
   labs(title = "Time Interval between Eye Contact Events", x = "Time Interval (msec)") 
 
-thr <- 1000
-sum(int <= thr) / length(int) * 100
+thr_interval <- 500
+df %>>%
+  group_by(Participant_name) %>>%
+  summarize(N = n(),
+            count = sum(interval < thr_interval, na.rm=TRUE),
+            over = N -count,
+            prop = count / N * 100)
 ```
 
 \   
 
 ###各Session・Eventについて, 要約統計量を算出
 
-Face Annotationのデータを読み込む. 
+Face Annotationのデータを読み込み、Event間の時間間隔の閾値を設定してセッションを定義
 
 ```{r}
 # Face Annotation のデータを取得
 file_name <-list.files(getwd(), pattern='Face_')
-data <- read.csv(file_name)
+data <- read_csv(file_name)
 
-thr <- 1000
+# threshold(ms)設定
+thr <- 250
 
+# Sessionを定義
 data$SessionID <- rep(1, length = nrow(data))
 for(i in 1:(nrow(data) - 1))
   {
@@ -66,13 +90,54 @@ for(i in 1:(nrow(data) - 1))
     }
   }
 
-data <- data[c(1, 16, 2:15)]
+# 新たな列を追加
+data$FaceID_medi <- data$FaceID 
+data$Height_medi <- data$Height
+data$GazeTimeStamp_medi <- data$GazeTimeStamp
+data$FaceID_mean <- data$FaceID
+data$Height_mean <- data$Height
+data$GazeTimeStamp_mean <- data$GazeTimeStamp
+# data$FaceID_thre <- data$FaceID
+# data$Height_thre <- data$Height
+# data$GazeTimeStamp_thre <- data$GazeTimeStamp
 
+# 列の型を変化
 data$SessionID <- as.factor(data$SessionID)
 data$EventID <- as.factor(data$EventID)
 data$FrameID <- as.factor(data$FrameID)
 data$RotateID <- as.factor(data$RotateID)
 # data$FaceID <- as.factor(data$FaceID)
+
+## Face_(FILENAME).csv
+# VideoName: 元ビデオの名称
+# EventID: Eye Contact EventのID
+# FrameID: FrameID
+# RotateID: RotationID
+# GazeTimeStamp: 視線記録時刻(ms)
+# FrameNum: フレーム番号
+# MovieTimeStamp: フレーム時刻(ms)
+# Gaze_x: gaze coordinate (x)
+# Gaze_y: gaze coordinate (y)
+# Accel_x: accelerometor (x)
+# Accel_y: accelerometor (y)
+# Accel_z: accelerometor (z)
+# Degree: Degree of head from horizontal plane (degree)
+# FaceID: あるイベントにおけるannotation番号 
+# pos_x: annotationの基準点の座標 (x)
+# pos_y: annotationの基準点の座標 (y)  
+# Width: annotation size (horizontal)
+# Height: annotation size (vertical) 
+# Picture: 画像のpath
+# +++++++++++
+# FaceID_medi
+# FaceID_mean
+# FaceID_thre
+# Height_medi
+# Height_mean
+# Height_thre
+# GazeTimeStamp_medi
+# GazeTimestamp_mean
+# GazeTimestamp_thre
 ```
 
 SessionごとにDetect数, Miss数などを算出
@@ -84,103 +149,99 @@ data %>>%
             Fra_lev = length(levels(FrameID)), # SessionあたりのFrameIDの水準の数
             Rot_lev = length(levels(RotateID)), # SessiontあたりのRotateIDの水準数
             pic_num = Eve_lev * Fra_lev * Rot_lev, # SessionあたりのFace Detectionを実施した画像数
-            ano_num = n(), # Sessionあたりの, 検出されたannotationの数
-            Miss = sum(is.na(FaceID)), # Sessionあたりの, 顔を検出できなかった画像の数
-            Detect = pic_num - Miss, # Sessionあたりの, (FAも含まれるかもしれないが)顔を検出できた画像の数
-            allMiss = ifelse(Miss == pic_num, 1, 0), # ひとつも顔が検出されないEventであるかどうか
-            multiFace = ifelse(max(FaceID, na.rm=TRUE) >= 2, 1, 0), # Event内の画像に, 複数の顔が検出されることがあるかどうか
-            Mean = mean(Height, na.rm=TRUE),
-            SD = sd(Height, na.rm=TRUE),
-            Duration = max(GazeTimeStamp) - min(GazeTimeStamp)
-            ) -> df_Session
-#df_Session
+            row_num = n(), # Sessionあたりの行の数
+            multiFace = ifelse(max(FaceID, na.rm=TRUE) >= 2, 1, 0), # Event内の画像に, 複数のannotaionが検出されることがあるかどうか
+            Miss = sum(is.na(FaceID)), # Sessionあたりの, annotationを検出できなかった画像の数
+            Detect = pic_num - Miss, # Sessionあたりの, (FAも含まれるかもしれないが)annotationを検出できた画像の数
+            allMiss = ifelse(Miss == row_num, 1, 0), # ひとつもannotationが検出されないSessionであるかどうか
+            Mean = mean(Height, na.rm=TRUE), # Sessionあたりのannotationサイズの平均
+            SD = sd(Height, na.rm=TRUE), # Sessionあたりのannotationサイズの標準偏差
+            Duration = max(GazeTimeStamp) - min(GazeTimeStamp), # Sessionの時間長 
+            Deg = mean(Degree, na.rm=TRUE) # 水平面からの頭部角度のズレ
+            )  -> df_Session
+
+df_Session %>>%
+  ggplot(aes(x=SD)) +
+  geom_histogram(binwidth=2) +
+  labs(title='セッション内の検出枠サイズの標準偏差のばらつき',
+       x='セッション内の検出枠サイズの標準偏差')
+
+cat('検出枠なしセッションの数', sum(df_Session$allMiss == 1))
 ```
 
-EventごとにDetect数, Miss数などを算出
-
-```{r}
-data %>>%
-  group_by(EventID, SessionID) %>>%
-  summarise(Fra_lev = length(levels(FrameID)), # EventあたりのFrameIDの水準の数
-            Rot_lev = length(levels(RotateID)), # EventあたりのRotateIDの水準の数
-            pic_num = Fra_lev * Rot_lev, # EventあたりのFace Detectionを実施した画像数
-            ano_num = n(), # Eventあたりの,検出されたannotationの数
-            Miss = sum(is.na(FaceID)), # Eventあたりの, 顔を検出できなかった画像の数
-            Detect = pic_num - Miss, # Eventあたりの, (FAも含まれるかもしれないが)顔を検出できた画像の数
-            allMiss = ifelse(Miss == pic_num, 1, 0), # ひとつも顔が検出されないEventであるかどうか
-            multiFace = ifelse(max(FaceID, na.rm=TRUE) >= 2, 1, 0) # Event内の画像に, 複数の顔が検出されることがあるかどうか
-            ) -> df_Event
-#df_Event
-```
-
-###顔検出器の性能を評価する
-```{r}
-# Event数
-nrow(df_Event)
-
-# Detect率
-sum(df_Event$Detect >= 1) / nrow(df_Event) * 100
-
-# Miss率
-sum(df_Event$allMiss == 1) / nrow(df_Event) * 100
-```
 
 ###外れ値の除去
-
 ```{r}
-data$Height_rmv <- data$Height
-remove_id <- numeric()
-prop_SD <- 2
+start <- proc.time()
 
-for (i in 1:nrow(data))
-  {
-  session <- data[i, "SessionID"]
+removeID_mean <- numeric() 
+removeID_medi <- numeric()
+# removeID_thre <- numeric()
+
+for(i in 1:nrow(data)){
+  session <- data$SessionID[i]
+  
+  # 各SessionにおけるHeightについて, 箱ヒゲ図の基準における外れ値(BP$out)を検出
+  data %>>%
+  filter(SessionID == session) %>>%
+  select(Height) %>>%
+  boxplot(plot=FALSE) -> BP
+  
+  # 各SessionにおけるHeightについて, 平均(ses$Mean)と標準偏差(ses$SD)を計算
   df_Session %>>%
   filter(SessionID == session) %>>%
-  select(Mean, SD) -> sss
+  select(Mean, SD) -> ses
   
-  if (is.nan(sss$Mean) == F && is.nan(sss$SD) == F && is.na(data$Height[i]) == F)
-    {
-    if (data$Height[i] > sss$Mean + prop_SD * sss$SD || data$Height[i] < sss$Mean - prop_SD * sss$SD)
-      {
-      data$FaceID[i] <- 0
-      data$Height_rmv[i] <- NA
-      data$GazeTimeStamp[i] <- NA
-      remove_id <- c(remove_id, i)
+  if(is.na(data$Height[i])==FALSE){
+    # 箱ヒゲ図での外れ値に該当すればNAに
+    if(any(BP$out == data$Height[i])){
+      data$FaceID_medi[i] <- 0
+      data$Height_medi[i] <- NA
+      data$GazeTimeStamp_medi[i] <- NA
+      removeID_medi <- c(removeID_medi, i) 
+    }
+    
+    # 標準偏差の+-2*SDを超過でNAに
+    if(is.nan(ses$Mean) == FALSE && is.nan(ses$SD)==FALSE){
+      if(data$Height[i] > ses$Mean + 2 * ses$SD || data$Height[i] < ses$Mean - 2 * ses$SD){
+        data$FaceID_mean[i] <- 0
+        data$Height_mean[i] <- NA
+        data$GazeTimeStamp_mean[i] <- NA
+        removeID_mean <- c(removeID_mean, i)
       }
     }
   }
+}
 
-data <- data[c(1:15, 17, 16)]
-length(remove_id) # 外れ値として除去されたannotation dataの数
+proc.time() - start
+
+
+cat('中央値', length(removeID_medi))
+cat('平均値', length(removeID_mean))
 ```
 
-###再びSessionごとの要約統計量を算出
-
+# Session内のannotation sizeの標準偏差のヒストグラム
 ```{r}
 data %>>%
   group_by(SessionID) %>>%
-  summarise(Eve_lev = length(levels(droplevels(EventID))), # SessionあたりのEventIDの水準の数
-            Fra_lev = length(levels(FrameID)), # SessionあたりのFrameIDの水準の数
-            Rot_lev = length(levels(RotateID)), # SessionあたりのRotateIDの水準の数
-            pic_num = Eve_lev * Fra_lev * Rot_lev, # SessionあたりのFace Detectionを実施した画像数
-            ano_num = n(), # Sessionあたりのannotationの数
-            Miss = sum(is.na(FaceID)), # Eventあたりの, 顔を検出できなかった画像の数
-            Removed = sum(FaceID == 0, na.rm=TRUE), # 前処理で除去したannotationの数
-            Detect = pic_num - Miss - Removed, # Eventあたりの, (FAも含まれるかもしれないが)顔を検出できた画像の数
-            allMiss = ifelse(Miss + Removed == pic_num, 1, 0), # ひとつも顔が検出されないEventであるかどうか
-            multiFace = ifelse(max(FaceID, na.rm=TRUE) >= 2, 1, 0), # Event内の画像に, 複数の顔が検出されることがあるかどうか
-            Mean = mean(Height, na.rm=TRUE),
-            Mean_rmv = mean(Height_rmv, na.rm=TRUE),
-            SD = sd(Height, na.rm=TRUE),
-            SD_rmv = sd(Height_rmv, na.rm=TRUE),
-            Duration = max(GazeTimeStamp, na.rm=TRUE) - min(GazeTimeStamp, na.rm=TRUE)
-            ) -> df_Session
-#df_Session
+  summarise(raw = sd(Height, na.rm=TRUE),
+            boxplot = sd(Height_medi, na.rm=TRUE),
+            normalD = sd(Height_mean, na.rm=TRUE)
+            ) %>>%
+  gather(key='method', value='SD', 2:4) -> SD_ses
+
+  SD_ses %>>%
+  group_by(method) %>>%
+  summarise(value = median(SD, na.rm=TRUE)) -> SDval_medi
+
+  SD_ses %>>%
+  ggplot(aes(x=SD, fill=method)) +
+  facet_grid(method~.) +
+  geom_histogram(binwidth=2) +
+  geom_vline(data=SDval_medi, aes(xintercept = value), lwd=1, lty=2)
 ```
 
 ###同一画像に複数のannotationがある画像について, annotationをすべて無効にする.
-
 ```{r}
 data %>>%
   group_by(EventID, FrameID, RotateID, SessionID) %>>%
@@ -191,47 +252,136 @@ data %>>%
   filter(multiFace == 1) -> multiFace
 
 
-if(nrow(multiFace) > 0)
-  {
-  for(i in 1:nrow(multiFace))
-    {
-     eID <- multiFace$EventID[i]
-     fID <- multiFace$FrameID[i]
-     rID <- multiFace$RotateID[i]
-     
-     data$FaceID[data$EventID == eID & data$FrameID == fID & data$RotateID == rID] <- 0
-     data$Height_rmv[data$EventID == eID & data$FrameID == fID & data$RotateID == rID] <- NA
-     data$GazeTimeStamp[data$EventID == eID & data$FrameID == fID & data$RotateID == rID] <- NA
+if(nrow(multiFace) > 0){
+  for(i in 1:nrow(multiFace)){
+    eID <- multiFace$EventID[i]
+    fID <- multiFace$FrameID[i]
+    rID <- multiFace$RotateID[i]
+    
+    data$FaceID[data$EventID == eID & data$FrameID == fID & data$RotateID == rID] <- 0
+    data$Height[data$EventID == eID & data$FrameID == fID & data$RotateID == rID] <- NA
+    data$GazeTimeStamp[data$EventID == eID & data$FrameID == fID & data$RotateID == rID] <- NA
+    
+    data$FaceID_medi[data$EventID == eID & data$FrameID == fID & data$RotateID == rID] <- 0
+    data$Height_medi[data$EventID == eID & data$FrameID == fID & data$RotateID == rID] <- NA
+    data$GazeTimeStamp_medi[data$EventID == eID & data$FrameID == fID & data$RotateID == rID] <- NA
+    
+    data$FaceID_mean[data$EventID == eID & data$FrameID == fID & data$RotateID == rID] <- 0
+    data$Height_mean[data$EventID == eID & data$FrameID == fID & data$RotateID == rID] <- NA
+    data$GazeTimeStamp_mean[data$EventID == eID & data$FrameID == fID & data$RotateID == rID] <- NA
     }
 }
-
 # 無効化された画像
 nrow(multiFace)
 ```
 
-
-###再度Sessionごとの要約統計量を算出
-
+# 再びSession内のannotation sizeの標準偏差のヒストグラム
 ```{r}
 data %>>%
   group_by(SessionID) %>>%
-  summarise(Eve_lev = length(levels(droplevels(EventID))),
-            Fra_lev = length(levels(FrameID)), # SessionあたりのFrameIDの数
-            Rot_lev = length(levels(RotateID)), # SessiontあたりのRotateIDの数
+  summarise(raw = sd(Height, na.rm=TRUE),
+            boxplot = sd(Height_medi, na.rm=TRUE),
+            normalD = sd(Height_mean, na.rm=TRUE)
+            ) %>>%
+  gather(key='method', value='SD', 2:4) -> SD_ses
+
+SD_ses %>>%
+  group_by(method) %>>%
+  summarise(value = median(SD, na.rm=TRUE)) -> SDval_medi
+
+SD_ses %>>%
+  ggplot(aes(x=SD, fill=method)) +
+  facet_grid(method~.) +
+  geom_histogram(binwidth=3) +
+  # geom_density(adjust=0.3) +
+  geom_vline(data=SDval_medi, aes(xintercept = value), lwd=1, lty=2)
+```
+
+### Session内のannotationのSDが閾値以上の場合、そのSessionのannotationをすべて無効化
+```{r}
+thr_SD <- 15 # Session内のannotationのSDの閾値
+
+SD_ses %>>%
+  filter(SD > thr_SD & method == 'raw') %>>%
+  select(SessionID) -> sesID_over
+
+data$FaceID[data$SessionID %in% sesID_over$SessionID] <- 0
+data$Height[data$SessionID %in% sesID_over$SessionID] <- NA
+data$GazeTimeStamp[data$SessionID %in% sesID_over$SessionID] <- NA
+
+SD_ses %>>%
+  filter(SD > thr_SD & method == 'boxplot') %>>%
+  select(SessionID) -> sesID_over_medi
+
+data$FaceID_medi[data$SessionID %in% sesID_over_medi$SessionID] <- 0
+data$Height_medi[data$SessionID %in% sesID_over_medi$SessionID] <- NA
+data$GazeTimeStamp_medi[data$SessionID %in% sesID_over_medi$SessionID] <- NA
+
+
+SD_ses %>>%
+  filter(SD > thr_SD & method == 'normalD') %>>%
+  select(SessionID) -> sesID_over_mean
+
+data$FaceID_mean[data$SessionID %in% sesID_over_mean$SessionID] <- 0
+data$Height_mean[data$SessionID %in% sesID_over_mean$SessionID] <- NA
+data$GazeTimeStamp_mean[data$SessionID %in% sesID_over_mean$SessionID] <- NA
+
+cat('無効化したSessionの数(raw)', length(sesID_over$SessionID))
+cat('無効化したSessionの数(boxplot)', length(sesID_over_medi$SessionID))
+cat('無効化したSessionの数(normalD)', length(sesID_over_mean$SessionID))
+
+```
+
+# 再びSession内のannotation sizeの標準偏差のヒストグラム
+```{r}
+data %>>%
+  group_by(SessionID) %>>%
+  summarise(raw = sd(Height, na.rm=TRUE),
+            boxplot = sd(Height_medi, na.rm=TRUE),
+            normalD = sd(Height_mean, na.rm=TRUE)
+            ) %>>%
+  gather(key='method', value='SD', 2:4) -> SD_ses
+
+SD_ses %>>%
+  group_by(method) %>>%
+  summarise(value = median(SD, na.rm=TRUE)) -> SDval_medi_removed
+
+SD_ses %>>%
+  ggplot(aes(x=SD, fill=method)) +
+  facet_grid(method~.) +
+  geom_histogram(binwidth=2) +
+  geom_vline(data=SDval_medi, aes(xintercept = value), lwd=1, lty=2, col="grey50") +
+  geom_vline(data=SDval_medi_removed, aes(xintercept = value), lwd=1, lty=2) +
+  xlim(0,110)
+```
+
+# SessionごとにDetect数, Miss数などを算出(事前にmethodを選択しておくこと)
+
+```{r}
+# medianの場合
+data$FaceID <- data$FaceID_medi
+data$GazeTimeStamp <- data$GazeTimeStamp_medi
+data$Height <- data$Height_medi
+
+######################################
+data %>>%
+  group_by(SessionID) %>>%
+  summarise(Eve_lev = length(levels(droplevels(EventID))), # SessionあたりのEventIDの水準の数
+            Fra_lev = length(levels(FrameID)), # SessionあたりのFrameIDの水準の数
+            Rot_lev = length(levels(RotateID)), # SessiontあたりのRotateIDの水準数
             pic_num = Eve_lev * Fra_lev * Rot_lev, # SessionあたりのFace Detectionを実施した画像数
-            ano_num = n(), # Sessionあたりのannotationの数
-            Miss = sum(is.na(FaceID)), # Eventあたりの, 顔を検出できなかった画像の数
-            Removed = sum(FaceID == 0, na.rm=TRUE), # 無効化されたannotationの数
-            Detect = ano_num - Miss - Removed, # Eventあたりの, (FAも含まれるかもしれないが)顔を検出できた画像の数
-            allMiss = ifelse(Miss + Removed == ano_num, 1, 0), # ひとつも顔が検出されないEventであるかどうか
-            multiFace = ifelse(max(FaceID, na.rm=TRUE) >= 2, 1, 0), # Event内の画像に, 複数の顔が検出されることがあるかどうか
-            Mean = mean(Height, na.rm=TRUE),
-            Mean_rmv = mean(Height_rmv, na.rm=TRUE),
-            SD = sd(Height, na.rm=TRUE),
-            SD_rmv = sd(Height_rmv, na.rm=TRUE),
-            Duration = max(GazeTimeStamp, na.rm=TRUE) - min(GazeTimeStamp, na.rm=TRUE)
-            ) -> df_Session
+            row_num = n(),
+            multiFace = ifelse(max(FaceID, na.rm=TRUE) >= 2, 1, 0), # 同一画像に,複数のannotaionが検出されることがあるか
+            Detect = sum(FaceID == 1, na.rm=TRUE), # 検出されたannotationの数
+            allMiss = ifelse(Detect == 0, 1, 0),
+            Mean = mean(Height, na.rm=TRUE), # Sessionあたりのannotationサイズの平均
+            SD = sd(Height, na.rm=TRUE), # Sessionあたりのannotationサイズの標準偏差
+            Duration = max(GazeTimeStamp, na.rm=TRUE) - min(GazeTimeStamp, na.rm=TRUE), # Sessionの時間長
+            Deg = mean(Degree, na.rm=TRUE)
+            )  -> df_Session
 df_Session
+
+cat('検出枠なしセッションの数', sum(df_Session$allMiss == 1))
 ```
 
 
@@ -253,11 +403,10 @@ strdate <- str_c(year, month, day, sep="-")
 obs <- as.POSIXct(strdate)
 
 # 日齢・月齢計算
-birthday <- read.csv("C:/Users/yamamoto/Desktop/infants.csv")
+birthday <- read_csv("C:/Users/yamamoto/Desktop/infants.csv")
 birth <- as.POSIXct(birthday$Birth[birthday$NameID == name_id])
 AiD <- length(seq(as.Date(birth), as.Date(obs), "day")) - 1 # AgeinDays
 AiM <- length(seq(as.Date(birth), as.Date(obs), "month")) - 1 # AgeinMonth
-
 
 df_Session %>>%
   filter(allMiss == 1) %>>%
@@ -276,7 +425,7 @@ if (nrow(allMiss) != 0)
            AgeinMonth = AiM,
            Video = factor(file_id)
            ) -> Annot
-  Annot <- Annot[c(6:10, 1:5)]  
+  Annot <- Annot[c(6:10, 1:5)] # 並び替え  
   
   complete <- 0
   } else
@@ -288,7 +437,7 @@ if (nrow(allMiss) != 0)
                AgeinMonth = AiM,
                Video = factor(file_id)
                ) -> df_Session
-    df_Session <- df_Session[c(17:21, 1:16)] 
+    df_Session <- df_Session[c(14:18, 1:13)] 
     print("すべてMissで構成されるSessionはない")
     
     complete <- 1
@@ -296,8 +445,6 @@ if (nrow(allMiss) != 0)
 ```
 
 ###データフレームの保存
-
-
 ```{r}
 if(complete != 0)
   {

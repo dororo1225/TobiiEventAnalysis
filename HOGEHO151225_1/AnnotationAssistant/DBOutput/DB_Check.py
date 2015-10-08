@@ -9,7 +9,7 @@ import os
 # USBタグ(FW1, FW2 etc.)
 obs_id = os.getcwd().split('\\')[-3]
 
-db_name = obs_id  + '.db'
+db_name = obs_id + '.db'
 data_path = os.getenv("HOMEDRIVE") + \
                     os.getenv("HOMEPATH") +  \
                     "\\Dropbox\\AnnotationAssistant\\" + db_name

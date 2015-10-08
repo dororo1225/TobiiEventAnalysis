@@ -25,6 +25,7 @@ data_path = os.getenv("HOMEDRIVE") + \
                     os.getenv("HOMEPATH") +  \
                     "\\Dropbox\\AnnotationAssistant\\" + db_name
 
+print data_path
 home = os.getenv("HOMEPATH")
 teacher = home.split("Users\\")[1]
 
