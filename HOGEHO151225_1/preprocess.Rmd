@@ -1,0 +1,161 @@
+---
+title: "preprocess2"
+author: "Hiroki YAMAMOTO"
+date: "2015.06.26"
+output: html_document
+---
+```{r}
+library(plyr)
+library(dplyr)
+library(stringr)
+library(readr)
+library(pipeR)
+options(dplyr.print_max = 1e9, dplyr.width = Inf) # dplyrの表示オプション
+```
+
+```{r}
+# 物体の実サイズ (cm)
+face_size = 22
+
+# 水平状態でのglassの角度 (degree)
+deg_default <- 3.739802
+# deg_default <- 0 # 補正なし
+
+df_par <- read_csv("C:/Users/yamamoto/Desktop/CameraParameter.csv")
+beta <- df_par$Mean[df_par$Parameter == 'beta']
+pw <- df_par$Mean[df_par$Parameter == 'pw']
+```
+
+```{r}
+# Event_csvを取得
+file_nameUP <-list.files(getwd(), pattern='Face_')
+
+if(length(file_nameUP) != 0){
+  df_face <- read_csv(file_nameUP)
+}
+
+df_face$EventID <- as.factor(df_face$EventID)
+df_face$RotateID <- as.factor(df_face$RotateID)
+```
+
+###データの取得
+
+```{r}
+HD <- getwd()
+# AnnotationDataを取得
+setwd("AnnotationAssistant/DBOutput")
+
+file_nameAN <-list.files(getwd(), pattern='Annotation')
+
+if(length(file_nameAN) != 0){
+  dataAN <- read.csv(file_nameAN)
+}
+
+setwd(HD)
+```
+
+###データの置換
+```{r}
+# imgpathからEventID, FrameID, RotateIDを取得 
+dataAN$imgpath <- as.character(dataAN$imgpath)
+
+dataAN %>>%
+  mutate(EventID = character(nrow(dataAN)),
+         RotateID = character(nrow(dataAN))
+         ) -> dataAN
+
+for(i in 1:nrow(dataAN))
+  {
+  IDs <- str_split(dataAN$imgpath[i], pattern = '_')[[1]][2]
+  eID <- str_split(IDs, pattern = fixed('.'))[[1]][2]
+  rID <- str_split(IDs, pattern = fixed('.'))[[1]][3]
+  
+  dataAN$EventID[i] <- eID
+  dataAN$RotateID[i] <- as.character(ifelse(str_detect(rID, pattern = 'm'), 
+                                            as.numeric(str_split(rID, pattern = 'm')[[1]][1]) * (-1),
+                                            rID)
+                                     )
+}
+
+#dataAN$EventID <- as.factor(dataAN$EventID)
+#dataAN$RotateID <- as.factor(dataAN$RotateID)
+```
+
+```{r}
+# rowdataの置換
+for(i in 1:nrow(dataAN))
+  {
+  eID <- dataAN$EventID[i]
+  rID <- dataAN$RotateID[i]
+  
+  df_face$pos_x[df_face$EventID == eID & df_face$RotateID == rID] <- dataAN$x[i]
+  df_face$pos_y[df_face$EventID == eID & df_face$RotateID == rID] <- dataAN$y[i]
+  df_face$Width[df_face$EventID == eID & df_face$RotateID == rID] <- dataAN$width[i]
+  df_face$Height[df_face$EventID == eID & df_face$RotateID == rID] <- dataAN$height[i]
+  }
+```
+
+###データフレームの編集
+
+```{r}
+video_name <-list.files(getwd(), pattern='.mp4')
+file_id <- str_split(video_name, pattern='.mp4')[[1]][1]
+file_id <- str_split(file_id, pattern='TB_')[[1]][2]
+
+# infantIDを取得
+name_id <- str_sub(file_id, start=1, end=6)
+
+# 調査日を取得
+year <- str_c("20", str_sub(file_id, start=7, end=8))
+month <- str_sub(file_id, start=9, end=10)
+day <- str_sub(file_id, start=11, end=12)
+strdate <- str_c(year, month, day, sep="-")
+obs <- as.POSIXct(strdate)
+
+# 日齢・月齢計算
+# birthday <- read.csv("C:/Users/yamamoto/Desktop/infants.csv")
+# birth <- as.POSIXct(birthday$Birth[birthday$NameID == name_id])
+# AiD <- length(seq(as.Date(birth), as.Date(obs), "day")) - 1 # AgeinDays
+# AiM <- length(seq(as.Date(birth), as.Date(obs), "month")) - 1 # AgeinMonth
+
+# 田村なのでここはテキトーに
+AiD <- length(seq(as.Date(obs), Sys.Date(), "day")) - 1
+AiM <- length(seq(as.Date(obs), Sys.Date(), "month")) - 1
+
+df_face %>>%
+  group_by(EventID) %>>%
+  summarise(Rot_lev = length(levels(RotateID)), # SessiontあたりのRotateIDの水準数
+            Mean = mean(Height, na.rm=TRUE), # Sessionあたりのannotationサイズの平均
+            SD = sd(Height, na.rm=TRUE), # Sessionあたりのannotationサイズの標準偏差
+            Duration = mean(Duration, na.rm=TRUE), # Sessionの時間長
+            Deg = mean(Degree, na.rm=TRUE),
+            Distance = beta * face_size * Mean ^ pw * cos((Deg - deg_default) * pi / 180),
+            EventTime = min(EventTime), # おそらくOK
+            GazeTimeStamp = mean(GazeTimeStamp)
+            ) %>>%
+  mutate(Name = factor(name_id),
+         Observe = obs,
+         AgeinDays = AiD,
+         AgeinMonth = AiM,
+         Video = factor(file_id)
+         ) -> df_summary
+df_summary <- df_summary[c(10:length(df_summary), 8:9, 1:7)] 
+complete <- 1
+
+```
+
+###データフレームの保存 
+
+```{r}
+if(complete != 0)
+  {
+  file_nameF <- paste("Face_", file_id, ".csv", sep="")
+  file_nameS <- paste("Summary_", file_id, ".csv", sep="")
+
+  # 前処理後(Sessionの付与・外れ値の除去・複数検出されたAnnotationの無効化)の"Face_ (file_id) .csv" のデータを保存
+  write.csv(df_face, file_nameF, quote = FALSE, row.names = FALSE)
+
+  # 前処理後のデータをSessionごとに要約した結果をcsvで保存 
+  write.csv(df_summary, file_nameS, quote = FALSE, row.names = FALSE)
+  }
+```
