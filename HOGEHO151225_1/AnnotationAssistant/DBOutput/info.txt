@@ -1,4 +1,0 @@
-static/images/Event10_EC.2.0.jpg 1 451 140 41 45
-static/images/Event17_EC.3.0.jpg 1 441 142 46 43
-static/images/Event24_EC.4.0.jpg 1 449 142 45 54
-static/images/Event3_EC.1.0.jpg 1 454 155 38 42

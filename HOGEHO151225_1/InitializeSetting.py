@@ -4,6 +4,9 @@ __author__ = 'yamamoto'
 import os
 import shutil
 
+obs_id = os.getcwd().split('\\')[-1]
+pic_name = obs_id.split('TB_')[1] + '.png'
+
 ##############################
 # Data要約 周辺
 ##############################
@@ -11,7 +14,10 @@ import shutil
 files = os.listdir(os.getcwd())  # ディレクトリ内のファイル名を取得
 for file in files:
     if file.startswith('Gaze_') or file.startswith('Event_') or file.startswith('Face_') or file.startswith('Summary_'):
-        os.remove(file)
+          os.remove(file)
+
+if os.path.isfile(pic_name):
+    os.remove(pic_name)
 
 #  FaceClipper\static\imagesを消去する
 if os.path.isdir('output'):
@@ -26,6 +32,12 @@ os.chdir('AnnotationAssistant')
 #  FaceClipper\static\imagesを消去する
 if os.path.isdir('FaceClipper\\static\\images'):
     shutil.rmtree('FaceClipper\\static\\images')
+
+if os.path.isdir('FaceClipper\\static\\' + obs_id):
+    shutil.rmtree('FaceClipper\\static\\' + obs_id)
+
+if os.path.isfile('FaceClipper\\static\\' + obs_id + '.txt'):
+    os.remove('FaceClipper\\static\\' + obs_id + '.txt')
 
 # DBOutput\\bg.txtを消去する
 if os.path.isfile('DBOutput\\bg.txt'):
@@ -60,8 +72,8 @@ data_path = os.getenv("HOMEDRIVE") + \
                     "\\Dropbox\\AnnotationAssistant\\" + db_name
 print data_path
 
-if os.path.isfile(data_path):
-    os.remove(data_path)
+# if os.path.isfile(data_path):
+#     os.remove(data_path)
 
 #  Dropbox\\test_db内のsamples.dbを消去する
 #  DBファイルの場所としてDropboxのpathを取得

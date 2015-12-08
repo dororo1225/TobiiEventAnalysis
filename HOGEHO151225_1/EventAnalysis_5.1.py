@@ -22,7 +22,7 @@ import pandas.tseries.offsets as offsets
 ################################################
 
 # # 出力の指定
-calcDuration = 0  # Whether caliculate Event Duration
+calcDuration = 1  # Whether caliculate Event Duration
 OutputPic = 1    # Whether Output Movie (1:Output / 0:Don't Output)
 OutputCSV = 1  # Whether OutputCSV (1:Output / 0:Don't Output)
 
@@ -33,6 +33,10 @@ video_name = video_name.split('TB_')[1]
 
 # # Tobiiデータの指定
 TBdata = 'Data Export.tsv'
+# TBdata = 'Data Export2.tsv'  # startとendのタグ数が不一致
+# TBdata = 'Data Export3.tsv'  # イベント間隔に1秒未満のものがある
+#　TBdata = 'Data Export4.tsv'  # 両方
+
 ParName = 'TamuraMasaya'
 RecDate = '2015-07-24'
 RecName = 'Recording004'
@@ -48,11 +52,14 @@ prop_resize = 1 * 1.0 / 2
 
 # # 画像に加える回転のrotate window
 interval = 10  # 回転角度の間隔
-rotateNum = 3      # 回転の回数
+rotateNum = 2      # 回転の回数
 
 # # DataBase作成のためのタグ (0でOK)
 copyFiles = 0
 formatDB = 0
+
+# errorフラッグ
+error = 0
 
 ################################################
 #  処理関数
@@ -162,6 +169,50 @@ while True:
     df_gaze = pd.concat((preprocess(r, ParName, RecDate, RecName) for r in reader), ignore_index=True)
     del df_gaze['Unnamed: 37']
 
+    # Event時のDataのみ抽出
+    df_event = df_gaze[df_gaze['Event'] == EventType]  # select Event
+
+    # Eventの生起時刻を計算
+    df_event = df_event.assign(Recording_stime=pd.to_datetime(df_event['Recording start time'], format='%H:%M:%S'))
+    event_time = []
+    for idx in df_event.index:
+        evt = df_event.ix[idx, 'Recording_stime'] + offsets.Milli(df_event.ix[idx, 'Recording timestamp'])
+        event_time.append(evt.strftime("%H:%M"))
+    df_event = df_event.assign(EventTime=event_time)
+
+    print df_event
+
+    # EventのDurationを計算
+    df_end = df_gaze[df_gaze['Event'] == 'EC_End']
+    if calcDuration == 1:
+        if df_event.shape[0] != df_end.shape[0]:
+            error = 1
+            print '-------------------------------------'
+            print 'Number of Event is'
+            print 'different from Number of Event End'
+            print 'Check Tobii Data Again'
+            print '-------------------------------------'
+            print
+
+        EventInterval = df_event['Recording timestamp'].as_matrix()[1:df_event.shape[0]] -\
+                            df_end['Recording timestamp'].as_matrix()[0:df_event.shape[0]-1]
+        if (EventInterval < 1000).any():
+            error = 1
+            print '-------------------------------------'
+            print 'Intervals between Events are'
+            print 'Over threshold'
+            print 'Check Tobii Data Again'
+            print df_end['Recording timestamp'].as_matrix()[0:df_event.shape[0]-1] [EventInterval < 1000], 'ms'
+            print '-------------------------------------'
+
+        if error == 1:
+            break
+
+        df_end.index = df_event.index
+        df_event = df_event.assign(Duration=df_end['Recording timestamp'] - df_event['Recording timestamp'])
+    else:
+        df_event = df_event.assign(Duration=[None] * df_end.shape[0])
+
     # フィルタリング
     df_accel = df_gaze[['Recording timestamp', 'Accelerometer X', 'Accelerometer Y', 'Accelerometer Z']].dropna()
     N = 2
@@ -199,52 +250,20 @@ while True:
     plt.plot(df_accel['Recording timestamp'], df_accel['Smooth_Z'], linewidth=2, alpha=0.7)
     plt.title('Accelerometer Z')
     plt.tight_layout()
-    plt.show()
+    # plt.show()
+    plt.savefig(video_name + '.png')
     # print len(df_gaze) - df_gaze.count()
 
-    # Event時のDataのみ抽出
-    df_event = df_gaze[df_gaze['Event'] == EventType]  # select Event
+    # ##############################
+    # Eventの部分だけ抽出/df_eventと合体
+    df_event = pd.concat([df_event, df_gaze[['Smooth_X', 'Smooth_Y', 'Smooth_Z', 'Degree']]],
+                        axis=1, join_axes=[df_event.index])
 
-    # Eventの生起時刻を計算
-    df_event = df_event.assign(Recording_stime=pd.to_datetime(df_event['Recording start time'], format='%H:%M:%S'))
-    event_time = []
-    for idx in df_event.index:
-        evt = df_event.ix[idx, 'Recording_stime'] + offsets.Milli(df_event.ix[idx, 'Recording timestamp'])
-        event_time.append(evt.strftime("%H:%M"))
-    df_event = df_event.assign(EventTime=event_time)
-
-    # EventのDurationを計算
-    df_end = df_gaze[df_gaze['Event'] == 'EC_End']
-    if calcDuration == 1:
-        if df_event.shape[0] != df_end.shape[0]:
-            print '-------------------------------------'
-            print 'Number of Event is'
-            print 'different from Number of Event End'
-            print 'Check Tobii Data Again'
-            print '-------------------------------------'
-            # break
-        else:
-            EventInterval = df_event['Recording timestamp'].as_matrix()[1:df_event.shape[0]] -\
-                            df_end['Recording timestamp'].as_matrix()[0:df_event.shape[0]-1]
-            if (EventInterval < 1000).any():
-                print '-------------------------------------'
-                print 'Intervals between Events are'
-                print 'Over threshold'
-                print 'Check Tobii Data Again'
-                print df_end['Recording timestamp'].as_matrix()[0:df_event.shape[0]-1] [EventInterval < 1000], 'ms'
-                print '-------------------------------------'
-                # break
-            else:
-                df_end.index = df_event.index
-                df_event = df_event.assign(Duration=df_end['Recording timestamp'] - df_event['Recording timestamp'])
-    else:
-        df_event = df_event.assign(Duration=[None] * df_end.shape[0])
-
-    # csv output
+    #  csv output
     # df_gaze.to_csv('Gaze_' + video_name + '.csv', index=False, na_rep='NA')
     del df_gaze, df_accel, df_end, df_event['Recording_stime']
 
-    # Eye ContactEbentにRotate Windowも含めたDataFrameをつくる(例外処理をつける)
+    # Eye ContactEventにRotate Windowも含めたDataFrameをつくる(例外処理をつける)
     df_event = df_event.assign(EventID=range(1, df_event.shape[0] + 1))
     df_event = df_event[['Project name', 'Participant name', 'Recording name', 'Recording date',
                          'EventTime', 'Recording timestamp', 'Event', 'EventID',
@@ -353,7 +372,7 @@ while True:
                 sign_r = 'm'
             else:
                 sign_r = ''
-            file_path = 'output/' + 'Event' + str(idx) + '_' + Event + '.' +\
+            file_path = 'output/' + 'Event' + str(idx).zfill(4) + '_' + video_name + '_' + Event + '.' +\
                         str(EventID) + '.' + str(abs(RotateID)) + sign_r + '.jpg'
 
             # アノテーションを画像に付加して描画
@@ -446,9 +465,24 @@ print os.getcwd().split('\\')[-1]
 if copyFiles == 1 and formatDB == 1:
     obs_id = os.getcwd().split('\\')[-1]
 
+    # USB coding用の空フォルダとtxtファイルをつくる.
+    file_name = obs_id + '.txt'
+    str = """cd App\Lib\site-packages
+    set PYTHONPATH=%cd%
+    cd ../../../
+    start http://127.0.0.1:5000/clipper
+    App\python.exe """ + obs_id + """/clipper.py
+    pause"""
+    # USB coding用 txtファイルの作成
+    f = open('AnnotationAssistant\\FaceClipper\\static\\' + file_name, 'w') # 書き込みモードで開く
+    f.write(str) # 引数の文字列をファイルに書き込む
+    f.close() # ファイルを閉じる
+    # USB codin用 空フォルダの作成
+    os.mkdir('AnnotationAssistant\\FaceClipper\\static\\' + obs_id)
+
+    # DBにアップロードする画像pathを取得
     os.chdir('AnnotationAssistant/FaceClipper/static/images')
     files = os.listdir(os.getcwd())  # ディレクトリ内のファイル名を取得
-
     # 画像データのpathのリストを作成
     file_path = []
     for var in files:
@@ -465,6 +499,7 @@ if copyFiles == 1 and formatDB == 1:
     data_path = os.getenv("HOMEDRIVE") + \
                         os.getenv("HOMEPATH") +  \
                         "\\Dropbox\\AnnotationAssistant\\" + db_name
+    # data_path = os.getenv("HOMEDRIVE") + os.getenv("HOMEPATH") + "\\Dropbox\\teach_db\\" + db_name # 練習用DBフォルダ
     print data_path
 
     if os.path.isfile(data_path):
