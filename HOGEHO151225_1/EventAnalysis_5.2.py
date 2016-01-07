@@ -446,8 +446,6 @@ print
 ################################################
 # DBのフォーマット
 ################################################
-copyFiles = 0
-formatDB = 0
 
 if copyFiles == 1:
     if os.path.isdir('AnnotationAssistant\\FaceClipper\\static\\images'):

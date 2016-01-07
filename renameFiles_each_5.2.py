@@ -13,8 +13,8 @@ import sys
 # ################################################
 #
 # # 参加者の名前を入力
-Name = 'Suzuki_Tomoki'
-RecName = ['Rec097', 'Rec098']
+Name = 'Hogehoge_hoge'
+RecName = ['Recording100', 'Recording101']
 # like 'Yamamoto_Hiroki'
 # Name = 'Iwata_Chiaki'
 
