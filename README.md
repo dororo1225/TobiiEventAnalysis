@@ -1,4 +1,4 @@
-TobiiEventAnalysys_5.0
+TobiiEventAnalysys_5.2
 ====
 
 ## Overview
