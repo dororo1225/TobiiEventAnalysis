@@ -27,20 +27,14 @@ OutputPic = 1    # Whether Output Movie (1:Output / 0:Don't Output)
 OutputCSV = 1  # Whether OutputCSV (1:Output / 0:Don't Output)
 
 # # 入力の指定(Video Input)
-video = 'TB_TAMUMA150724_1.mp4'
+video = 'TB_HOGEHO151225_1.mp4'
 video_name = video.split('.mp4')[0]
 video_name = video_name.split('TB_')[1]
+obs_id = video_name[0:12]
+video_num = int(video_name[-1])
 
 # # Tobiiデータの指定
 TBdata = 'Data Export.tsv'
-# TBdata = 'Data Export2.tsv'  # startとendのタグ数が不一致
-# TBdata = 'Data Export3.tsv'  # イベント間隔に1秒未満のものがある
-#　TBdata = 'Data Export4.tsv'  # 両方
-
-ParName = 'TamuraMasaya'
-RecDate = '2015-07-24'
-RecName = 'Recording004'
-
 
 # # イベント名
 EventType = 'EC'
@@ -52,7 +46,7 @@ prop_resize = 1 * 1.0 / 2
 
 # # 画像に加える回転のrotate window
 interval = 10  # 回転角度の間隔
-rotateNum = 2      # 回転の回数
+rotateNum = 3      # 回転の回数
 
 # # DataBase作成のためのタグ (0でOK)
 copyFiles = 0
@@ -155,6 +149,14 @@ while True:
     print 'MaxFrameNumber', FrameNum_Total
     print 'MaxTimeStamp', MaxTimeSTP
     print
+
+    # # 視線データの読み込み
+    desktop_path = os.getenv("HOMEDRIVE") + os.getenv("HOMEPATH") + "\\Desktop"
+    df_obs = pd.read_csv(desktop_path + '\\Observation.csv')
+    ParName = list(df_obs[df_obs['ObsID'] == obs_id]['Mother'])[0]
+    RecDate = list(df_obs[df_obs['ObsID'] == obs_id]['RecDate'])[0]
+    RecDate = datetime.datetime.strptime(RecDate, '%Y/%m/%d').strftime('%Y-%m-%d')
+    RecName = list(df_obs[df_obs['ObsID'] == obs_id]['RecName'])[0][1:-1].replace("'", "").replace(" ", "").split(",")[video_num - 1]
 
     # # 視線データの読み込み
     RecName = RecName if 'RecName' in locals() else 'Recording'
@@ -444,6 +446,8 @@ print
 ################################################
 # DBのフォーマット
 ################################################
+copyFiles = 0
+formatDB = 0
 
 if copyFiles == 1:
     if os.path.isdir('AnnotationAssistant\\FaceClipper\\static\\images'):
@@ -496,10 +500,10 @@ if copyFiles == 1 and formatDB == 1:
 
     # DBファイルの場所としてDropboxのpathを取得
     db_name = obs_id + '.db'
-    data_path = os.getenv("HOMEDRIVE") + \
-                        os.getenv("HOMEPATH") +  \
-                        "\\Dropbox\\AnnotationAssistant\\" + db_name
-    # data_path = os.getenv("HOMEDRIVE") + os.getenv("HOMEPATH") + "\\Dropbox\\teach_db\\" + db_name # 練習用DBフォルダ
+    # data_path = os.getenv("HOMEDRIVE") + \
+    #                     os.getenv("HOMEPATH") +  \
+    #                     "\\Dropbox\\AnnotationAssistant\\" + db_name
+    data_path = os.getenv("HOMEDRIVE") + os.getenv("HOMEPATH") + "\\Dropbox\\teach_db\\" + db_name # 練習用DBフォルダ
     print data_path
 
     if os.path.isfile(data_path):
