@@ -6,9 +6,8 @@ Tobii Glasses2のRaw Dataを用いて解析をおこなうためのPython & Rス
 
 ## Prerequest
 - Tobii Glasses2のRaw Dataをtsvファイルとして出力しておく('Data Export.csv').
-- 処理したいデータの(Analysys Softwareにおける) Recording Number, Participant Name, Recording Dateをメモしておく.
 - Dropboxに "AnnotationAssistant" フォルダがあることを確認しておく.
-- Desktopに 'infants.csv' , 'CameraParameter.csv'があることを確認しておく.
+- Desktopに 'infants.csv' , 'Observation.csv', 'CameraParameter.csv'があることを確認しておく.
 - 処理したいデータのmp4ファイルとtsvファイルをTobiiEventAnalysys_5.0.pyのあるディレクトリに移動させておく.
 
 ## Usage
