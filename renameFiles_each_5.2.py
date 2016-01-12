@@ -82,8 +82,12 @@ def count_days(b, s):
         days = s.day - b.day
     else:
         try:
-            before = s.replace(month=s.month - 1, day=b.day)
-            days = (s - before).days
+            if s.month == 1:
+                before = s.replace(year=s.year - 1, month=12, day=b.day)
+                days = (s - before).days
+            else:
+                before = s.replace(month=s.month - 1, day=b.day)
+                days = (s - before).days
         except ValueError:
             days = s.day
             # 2月は1ヶ月バックするとエラーになる時がある(誕生日が29-31日の時)
@@ -252,6 +256,7 @@ while True:
             df_obs['Obs'] = pd.to_datetime(df_obs['Obs'])
             # 重複行があれば削除
             df_obs = df_obs[df_obs['Obs'].duplicated() == False]
+            # df_obs = df_obs[df_obs['Obs'].duplicated(keep='last') == False]
         df_obs = df_obs.sort_values('Obs')  # 観察日順に並び替え
         df_obs.insert(0, 'SerialID', range(1, len(df_obs)+1))  # ObsIDをつける
         df_obs = df_obs.sort_values(['id', 'Obs'])  # id, ObsIDの順にソート
