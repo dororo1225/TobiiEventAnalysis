@@ -249,7 +249,11 @@ while True:
 
         if os.path.isfile(desktop_path + '\\Observation.csv'):
             df_old = pd.read_csv(desktop_path + '\\Observation.csv')
+            # 古いデータをObservation_old.csvとして保存
+            df_old.to_csv(desktop_path + '\\Observation_old.csv', index=False, na_rep='NA')
             del df_old['SerialID']
+            df_old = df_old[['id', 'NameID', 'Name', 'Birth', 'Mother', 'Obs',
+                             'ObsID', 'AgeinDays', 'Months', 'Days', 'GP', 'TB', 'AD', 'EX', 'RecDate', 'RecName']]
             # for idx in df_old.index:
             #     df_old.ix[idx, 'Obs'] = datetime.datetime.strptime(df_old.ix[idx, 'Obs'], '%Y-%m-%d %H:%M:%S')
             df_obs = pd.concat([df_old, df_obs])
@@ -262,7 +266,7 @@ while True:
         df_obs = df_obs.sort_values(['id', 'Obs'])  # id, ObsIDの順にソート
 
         print df_obs
-        # df_obs.to_csv(desktop_path + '\\Observation.csv', index=False, na_rep='NA')
+        df_obs.to_csv(desktop_path + '\\Observation.csv', index=False, na_rep='NA')
 
         break
 
