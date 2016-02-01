@@ -259,8 +259,8 @@ while True:
             df_obs = pd.concat([df_old, df_obs])
             df_obs['Obs'] = pd.to_datetime(df_obs['Obs'])
             # 重複行があれば削除
-            df_obs = df_obs[df_obs['Obs'].duplicated() == False]
-            # df_obs = df_obs[df_obs['Obs'].duplicated(keep='last') == False]
+            df_obs = df_obs[df_obs['ObsID'].duplicated() == False]
+            # df_obs = df_obs[df_obs['ObsID'].duplicated(keep='last') == False]
         df_obs = df_obs.sort_values('Obs')  # 観察日順に並び替え
         df_obs.insert(0, 'SerialID', range(1, len(df_obs)+1))  # ObsIDをつける
         df_obs = df_obs.sort_values(['id', 'Obs'])  # id, ObsIDの順にソート
