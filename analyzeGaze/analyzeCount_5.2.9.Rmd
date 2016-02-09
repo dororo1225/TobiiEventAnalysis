@@ -1,0 +1,138 @@
+---
+title: "Analysys_Count"
+author: "山本寛樹"
+date: "2015年12月9日"
+output:
+  pdf_document:
+    latex_engine: xelatex
+  html_document: default
+monofont: Meiryo
+mainfont: Meiryo
+---
+```{r, message=FALSE}
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(stringr)
+library(pipeR)
+library(ggplot2)
+options(dplyr.print_max = 1e9, dplyr.width = Inf) # dplyrの表示オプション
+```
+
+```{r}
+# files <- list.files(getwd(),pattern = 'Event_', recursive=T, include.dirs=T)
+# akan <- character(length(files))
+
+# for (i in 1:length(files)){
+#   d_unknown <- read_csv(files[i])
+#   if (as.character(d_unknown$'Recording date'[1]) =='Unkown'){
+#     akan[i] <- d_unknown$'Recording date'[i]
+#   }
+# }
+```
+
+```{r}
+# Observation.csv取得
+read_csv("C:/Users/yamamoto/Desktop/Observation.csv") %>>%
+  select(NameID, ObsID, AgeinDays, Months, Days) -> df_obs
+# df_obs$Obs <- as.Date(df_obs$Obs)
+
+# summarizeBehavor.csv取得
+read_csv("C:/Users/yamamoto/Documents/Fieldwork_data/BehaviorData/summarizeBehavior.csv") %>>%
+  select(-AgeinMonths, -Observe) -> df_sum_behav
+
+
+# 関数定義
+modifyCSVFormat <- function(d_name){
+  read_csv(d_name) %>>%
+    mutate(Video = str_sub(d_name, start = -18, end = -5),
+           ObsID = str_sub(d_name, start = -18, end = -7))
+}
+
+# サブディレクトリも含めて, 'Event_'から始まるcsvファイルをすべて取得・縦方向に結合
+list.files(getwd(),pattern = 'Event_', recursive=T, include.dirs=T) %>>%
+  ldply(modifyCSVFormat) %>>% 
+  left_join(df_obs, by = "ObsID") %>>% 
+  left_join(df_sum_behav, by = c("NameID", "ObsID")) -> df
+
+# 列名の空白文字を_に置き換え
+colnames(df) <- str_replace_all(colnames(df), pattern = " ", replace = "_")
+
+df %>>%
+  rename(Observe = Recording_date) -> df
+```
+
+```{r}
+# 月齢を前半と後半に分ける
+df %>>%
+  mutate(AgeinMonths = ifelse(Days <= 14, Months, Months + 0.5)) -> df
+
+# 例外処理
+df$AgeinMonths[str_detect(df$ObsID, pattern = "KINOTU151104")] <- 13
+```
+
+\newpage
+
+# アイ・コンタクトの回数の発達変化
+```{r, fig.height=7, fig.width=8, echo=FALSE}
+df %>>%
+  filter(Duration > 0) %>>%
+  mutate(MovingStyle = ifelse(Crawl_Move2 >= 50, "Crawler", "Walker")) %>>%
+  group_by(NameID, AgeinMonths) %>>%
+  summarise(Count = n(),
+            ObsTime = first(ObsTime),
+            MovingStyle = first(MovingStyle)) %>>%
+  ggplot(aes(x = AgeinMonths, y = Count, colour = NameID)) +
+  geom_line(lwd = 1) +
+  geom_point(aes(fill = MovingStyle, size = ObsTime), shape = 21) +
+  facet_grid(NameID~.) +
+  labs(title = "Developmental Change of Eye Contact Frequency") +
+  scale_x_continuous(breaks = seq(min(df$AgeinMonths), max(df$AgeinMonths), by=0.5)) +
+  scale_fill_manual(values = c("white", "grey50"))
+```
+
+
+\newpage
+
+# アイ・コンタクトの頻度の発達変化
+```{r}
+# グラフパラメーター
+PT = 2
+ATT = 1.75
+ATX = 1.5
+LTT = 2
+LTX = 1.75
+FTX = 1.8
+```
+
+
+```{r, fig.height=7, fig.width=8, echo=FALSE}
+df %>>%
+  filter(Duration > 0) %>>%
+  mutate(MovingStyle = ifelse(Crawl_Move2 >= 50, "Crawler", "Walker")) %>>%
+  group_by(NameID, AgeinMonths) %>>%
+  summarise(Count = n(),
+            ObsTime = first(ObsTime),
+            Frequency = Count / ObsTime * 15 / 60,
+            MovingStyle = first(MovingStyle)) %>>%
+  ggplot(aes(x = AgeinMonths, y = Frequency, colour = NameID)) +
+  geom_line(lwd = 1) +
+  geom_point(aes(fill = MovingStyle), shape = 21, size = 5) +
+  facet_grid(NameID~.) +
+  labs(title = "Developmental Change of Eye Contact Frequency",
+       y = "Frequency (num / min)",
+       fill = "Moving\nStyle") +
+  scale_x_continuous(breaks = seq(min(df$AgeinMonths), max(df$AgeinMonths), by=0.5)) +
+  scale_fill_manual(values = c("white", "grey50")) +
+  theme(plot.title = element_text(size = rel(PT), lineheight = 0.5, face = "bold"),
+        axis.title = element_text(size = rel(ATT), face = "bold"),
+        axis.text = element_text(face = "bold", colour = "grey25"),
+        axis.text.x = element_text(size = rel(1.5 *1.2))
+        ) +
+  theme(legend.title = element_text(size = rel(LTT), face = "bold"),
+        legend.text = element_text(size = rel(LTX), face = "bold")
+        ) +
+  theme(strip.text.y = element_text(size = rel(FTX), face = "bold"))
+```
+

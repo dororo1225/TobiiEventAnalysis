@@ -1,0 +1,105 @@
+---
+title: "XLSXtoCSV"
+author: "山本寛樹"
+date: "2015年12月14日"
+output: html_document
+---
+
+# Excelで作成したExcelファイルのミスをチェックして, csv出力する.
+
+```{r}
+library(plyr)
+library(dplyr)
+library(readr)
+library(readxl)
+library(pipeR)
+library(stringr)
+options(dplyr.print_max = 1e9, dplyr.width = Inf) # dplyrの表示オプション
+```
+
+
+# 列数の確認
+```{r}
+files_input <- list.files(getwd(), recursive=T, pattern="TB_")
+files_input <- files_input[str_detect(files_input, pattern = "xlsx")]
+
+col_num <- numeric(length(files_input))
+for (i in 1:length(files_input)){
+  read_excel(files_input[i]) %>>%
+    filter(!is.na(time)) %>>%
+    replace(is.na(.), 0) %>>%
+    length() -> col_num[i]
+}
+
+min(col_num)
+max(col_num)
+```
+
+# 各ファイルのName列がひとつか確認
+```{r}
+files_input <- list.files(getwd(), recursive=T, pattern="TB_")
+files_input <- files_input[str_detect(files_input, pattern = "xlsx")]
+
+col_names1 <- numeric(length(files_input))
+for (i in 1:length(files_input)){
+  read_excel(files_input[i]) %>>%
+    filter(!is.na(time)) %>>%
+    replace(is.na(.), 0) %>>%
+    (Name) %>>%
+    as.factor() %>>%
+    levels() %>%
+    length() -> col_names1[i]
+}
+
+max(col_names1)
+```
+
+# 各ファイル名とName列が一致するか確認
+```{r}
+files_input <- list.files(getwd(), recursive=T, pattern="TB_")
+files_input <- files_input[str_detect(files_input, pattern = "xlsx")]
+
+col_names2 <- character(length(files_input))
+for (i in 1:length(files_input)){
+  read_excel(files_input[i]) %>>%
+    filter(!is.na(time)) %>>%
+    replace(is.na(.), 0) %>>%
+    (Name) %>>%
+    as.factor() %>>%
+    levels() -> col_names2[i]
+}
+
+# ファイル名と列名が異なるファイル一覧
+files_input[str_sub(files_input, start = 8, end = -6) != col_names2]
+```
+
+# CSV出力
+```{r}
+files_input <- list.files(getwd(), recursive=T, pattern="TB_")
+files_input <- files_input[str_detect(files_input, pattern = "xlsx")]
+str_sub(files_input, start = 7) %>>%
+  str_replace(pattern = "xlsx", replacement = "csv") %>>%
+  str_replace(pattern = "/", replacement = "CSV/")-> files_output
+  
+for (i in 1:length(files_input)){
+  read_excel(files_input[i]) %>>%
+    filter(!is.na(time)) %>>%
+    replace(is.na(.), 0) %>>%
+    rename(Video = Name,
+           abscence = inai,
+           crawl = haihai,
+           cruise = tsutaiaruki,
+           walk = aruku) -> df_xlsx
+  df_xlsx$Video <- str_sub(df_xlsx$Video, start = 4) 
+  df_xlsx %>>%
+    mutate(ObsID = str_sub(Video, end = -3)) -> df_xlsx
+  
+  # 列の並び替え
+  df_xlsx <- df_xlsx[c(9, 1:8)]
+  
+  # csv output
+  df_xlsx %>>%
+    write_csv(files_output[i])
+}
+```
+

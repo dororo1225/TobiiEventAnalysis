@@ -146,7 +146,7 @@ df_face %>>%
          Observe = obs,
          ObsID = obs_id,
          AgeinDays = df_obs$AgeinDays,
-         AgeinMonth = df_obs$Months,
+         Months = df_obs$Months,
          Days = df_obs$Days,
          Video = video_id
          ) -> df_summary

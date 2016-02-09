@@ -1,0 +1,143 @@
+---
+title: "Analysys_Duration"
+author: "山本寛樹"
+date: "2015年12月9日"
+output:
+  pdf_document:
+    latex_engine: xelatex
+  html_document: default
+monofont: Meiryo
+mainfont: Meiryo
+---
+```{r, message=FALSE}
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(stringr)
+library(pipeR)
+library(ggplot2)
+options(dplyr.print_max = 1e9, dplyr.width = Inf) # dplyrの表示オプション
+```
+
+```{r}
+# Observation.csv取得
+read_csv("C:/Users/yamamoto/Desktop/Observation.csv") %>>%
+  select(NameID, ObsID, AgeinDays, Months, Days) -> df_obs
+# df_obs$Obs <- as.Date(df_obs$Obs)
+
+# summarizeBehavor.csv取得
+read_csv("C:/Users/yamamoto/Documents/Fieldwork_data/BehaviorData/summarizeBehavior.csv") %>>%
+  select(-AgeinMonths, -Observe) -> df_sum_behav
+
+
+# 関数定義
+modifyCSVFormat <- function(d_name){
+  read_csv(d_name) %>>%
+    mutate(Video = str_sub(d_name, start = -18, end = -5),
+           ObsID = str_sub(d_name, start = -18, end = -7))
+}
+
+# サブディレクトリも含めて, 'Event_'から始まるcsvファイルをすべて取得・縦方向に結合
+list.files(getwd(),pattern = 'Event_', recursive=T, include.dirs=T) %>>%
+  ldply(modifyCSVFormat) %>>% 
+  left_join(df_obs, by = "ObsID") %>>% 
+  left_join(df_sum_behav, by = c("NameID", "ObsID")) -> df
+
+# 列名の空白文字を_に置き換え
+colnames(df) <- str_replace_all(colnames(df), pattern = " ", replace = "_")
+
+df %>>%
+  rename(Observe = Recording_date) -> df
+```
+
+```{r}
+# 月齢を前半と後半に分ける
+df %>>%
+  mutate(AgeinMonths = ifelse(Days <= 14, Months, Months + 0.5)) -> df
+
+# 例外処理
+df$AgeinMonths[str_detect(df$ObsID, pattern = "KINOTU151104")] <- 13
+```
+
+```{r}
+df %>>%
+  filter(Duration > 0 & Duration <= 10000) %>>%
+  mutate(MovingStyle = ifelse(Crawl_Move2 >= 50, "Crawler", "Walker")) %>>%
+  group_by(NameID, AgeinMonths) %>>%
+  summarise(N = n(),
+            Mean = mean(Duration),
+            SD = sd(Duration),
+            SE = SD / sqrt(N),
+            MovingStyle = first(MovingStyle)
+            ) -> df_dur
+```
+
+\newpage
+
+## アイコンタクトの時間長の発達変化(line)
+
+```{r, fig.height=8, fig.width=7, fig.align='center', echo=FALSE}
+df_dur %>>%
+  ggplot(aes(x = AgeinMonths, y = Mean)) +
+  geom_line(aes(colour = NameID), lwd = 1, lty = 2) +
+  geom_errorbar(aes(max = Mean + SE, min = Mean - SE, colour = NameID), width = 0.2, lwd = 1, lty = 1) +
+  geom_point(aes(fill = MovingStyle), shape = 21, size = 4) +
+  facet_grid(NameID~.) +
+  labs(y = "Duration (millisecond)",
+       title = "Developmental Change of Eye Contact Duration") +
+  scale_x_continuous(breaks = seq(min(df$AgeinMonths), max(df$AgeinMonths), by=0.5)) +
+  scale_fill_manual(values = c("white", "grey50")) 
+```
+
+\newpage
+
+## アイコンタクトの時間長の発達変化(violin plot)  
+
+```{r, fig.height=8, fig.width=7, fig.align='center', echo=FALSE}
+df %>>%
+  filter(Duration > 0 & Duration <= 10000) %>>%
+  mutate(MovingStyle=ifelse(Crawl_Move2 >= 50, "Crawler", "Walker")) %>>%
+  ggplot(aes(x = as.character(AgeinMonths), y = Duration, colour = NameID)) +
+  geom_violin(aes(fill = MovingStyle), lwd = 1) +
+  stat_summary(fun.y = median, geom = "point", shape = 19, size = 3) +
+  facet_grid(NameID~.) +
+  labs(x = "Months",
+       y = "Duration (millisecond)",
+       title = "Developmental Change of Eye Contact Duration") +
+  scale_fill_manual(values = c("white", "grey50"))
+```
+
+\newpage
+
+## アイコンタクトの時間長の発達変化(histogram)
+
+```{r, fig.height=8, fig.width=9, echo=FALSE}
+df %>>%
+  filter(Duration > 0 & Duration <= 10000 ) %>>%
+  mutate(MovingStyle = ifelse(Crawl_Move2 >= 50, "Crawler", "Walker")) %>>%
+  ggplot(aes(x = Duration, colour = NameID, fill = MovingStyle)) +
+  geom_histogram(binwidth = 500) +
+  facet_grid(AgeinMonths~ NameID) +
+  labs(title = "Developmental Change of Eye Contact Duration") +
+  scale_fill_manual(values = c("white", "grey50"))
+```
+
+\newpage
+
+## アイコンタクトの時間長の発達変化(density plot)
+
+```{r, fig.height=8, fig.width=9, echo=FALSE}
+df %>>%
+  filter(Duration > 0 & Duration <= 10000) %>>%
+  mutate(MovingStyle = ifelse(Crawl_Move2 >= 50, "Crawler", "Walker")) %>>%
+  ggplot(aes(x = Duration, colour = NameID, fill = MovingStyle)) +
+  geom_density(lwd = 1) +
+  facet_grid(AgeinMonths ~ NameID) +
+  labs(title = "Developmental Change of Eye Contact Duration") +
+  scale_fill_manual(values = c("white", "grey50")) +
+  scale_x_continuous(breaks = seq(0, 25000, by=5000)) +
+  scale_y_continuous(breaks = seq(0, 0.001, length=2))
+```
+
+ガンマ分布？
