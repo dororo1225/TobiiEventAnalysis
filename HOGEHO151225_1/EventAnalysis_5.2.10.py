@@ -155,7 +155,6 @@ while True:
     df_obs = pd.read_csv(desktop_path + '\\Observation.csv')
     ParName = list(df_obs[df_obs['ObsID'] == obs_id]['Mother'])[0]
     RecDate = list(df_obs[df_obs['ObsID'] == obs_id]['RecDate'])[0]
-    RecDate = datetime.datetime.strptime(RecDate, '%Y/%m/%d').strftime('%Y-%m-%d')
     RecName = list(df_obs[df_obs['ObsID'] == obs_id]['RecName'])[0][1:-1].replace("'", "").replace(" ", "").split(",")[video_num - 1]
 
     # # 視線データの読み込み
@@ -262,7 +261,7 @@ while True:
                         axis=1, join_axes=[df_event.index])
 
     #  csv output
-    # df_gaze.to_csv('Gaze_' + video_name + '.csv', index=False, na_rep='NA')
+    df_gaze.to_csv('Gaze_' + video_name + '.csv', index=False, na_rep='NA')
     del df_gaze, df_accel, df_end, df_event['Recording_stime']
 
     # Eye ContactEventにRotate Windowも含めたDataFrameをつくる(例外処理をつける)

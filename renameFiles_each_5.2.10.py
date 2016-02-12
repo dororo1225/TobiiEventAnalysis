@@ -174,7 +174,6 @@ while True:
         print('GP', GP)
         # 調査日程からfileIDを定義
         datetime_obs = datetime.datetime.fromtimestamp(list(GP.items())[0][0])
-        RecDate = datetime.date(datetime_obs.year, datetime_obs.month, datetime_obs.day)
         ObsID = NameID + datetime_obs.strftime('%y%m%d')
         i = 0
         for st_mtime, fileName in sorted(list(GP.items())):
@@ -186,7 +185,6 @@ while True:
         print('TB', TB)
         # 調査日程からfileIDを定義
         datetime_obs = datetime.datetime.fromtimestamp(list(TB.items())[0][0])
-        RecDate = datetime.date(datetime_obs.year, datetime_obs.month, datetime_obs.day)
         ObsID = NameID + datetime_obs.strftime('%y%m%d')
         i = 0
         for st_mtime, fileName in sorted(list(TB.items())):
@@ -201,7 +199,6 @@ while True:
         # 調査日程からfileIDを定義
         print('AD', AD)
         datetime_obsA = datetime.datetime.fromtimestamp(list(AD.items())[0][0])
-        # RecDateaa = datetime.date(datetime_obsA.year, datetime_obsA.month, datetime_obsA.day)
         ObsIDa = NameID + datetime_obs.strftime('%y%m%d')
         i = 0
         for st_mtime, fileName in sorted(list(AD.items())):
@@ -210,7 +207,6 @@ while True:
             os.rename(fileName, newName)
 
     if len(EX) != 0 and 'datetime_obs' in locals():
-        # RecDate = datetime.date(datetime_obs.year, datetime_obs.month, datetime_obs.day)
         ObsID = NameID + datetime_obs.strftime('%y%m%d')
         i = 0
         for st_mtime, fileName in sorted(list(EX.items())):
@@ -219,6 +215,8 @@ while True:
             os.rename(fileName, newName)
 
     if (len(GP) != 0 or len(TB) != 0 or len(AD) != 0 or len(EX) != 0) and 'datetime_obs' in locals():
+        RecDate = datetime.datetime.strptime(ObsID[6:12], '%y%m%d').strftime('%Y-%m-%d')
+
         # 調査日程・誕生日から月齢・日齢を計算
         # 日齢計算
         Age_days = (datetime_obs - datetime_birth).days  # 日齢
@@ -249,18 +247,14 @@ while True:
 
         if os.path.isfile(desktop_path + '\\Observation.csv'):
             df_old = pd.read_csv(desktop_path + '\\Observation.csv')
-            # 古いデータをObservation_old.csvとして保存
-            df_old.to_csv(desktop_path + '\\Observation_old.csv', index=False, na_rep='NA')
             del df_old['SerialID']
-            df_old = df_old[['id', 'NameID', 'Name', 'Birth', 'Mother', 'Obs',
-                             'ObsID', 'AgeinDays', 'Months', 'Days', 'GP', 'TB', 'AD', 'EX', 'RecDate', 'RecName']]
             # for idx in df_old.index:
             #     df_old.ix[idx, 'Obs'] = datetime.datetime.strptime(df_old.ix[idx, 'Obs'], '%Y-%m-%d %H:%M:%S')
             df_obs = pd.concat([df_old, df_obs])
             df_obs['Obs'] = pd.to_datetime(df_obs['Obs'])
             # 重複行があれば削除
-            df_obs = df_obs[df_obs['ObsID'].duplicated() == False]
-            # df_obs = df_obs[df_obs['ObsID'].duplicated(keep='last') == False]
+            # df_obs = df_obs[df_obs['ObsID'].duplicated() == False]
+            df_obs = df_obs[df_obs['ObsID'].duplicated(keep='last') == False]
         df_obs = df_obs.sort_values('Obs')  # 観察日順に並び替え
         df_obs.insert(0, 'SerialID', range(1, len(df_obs)+1))  # ObsIDをつける
         df_obs = df_obs.sort_values(['id', 'Obs'])  # id, ObsIDの順にソート
